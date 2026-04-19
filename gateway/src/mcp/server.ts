@@ -33,6 +33,7 @@ import {
   dailyCheckin,
   kitPrepCard,
   kitDraftContext,
+  kitReconnectContext,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -235,6 +236,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "kit_get_energy",
       description: "Check what energy level is recorded for today.",
       inputSchema: { type: "object", properties: {}, required: [] },
+    },
+    {
+      name: "kit_reconnect_context",
+      description:
+        "Returns a reconnection brief for a dormant contact — how you know them, " +
+        "last interaction, interests, suggested opener style, and a reassurance message " +
+        "to counter anxiety about reaching out after a long gap. " +
+        "Use this for contacts with black drift status.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_name: {
+            type: "string",
+            description: "Contact name (full or partial) or their ID",
+          },
+        },
+        required: ["contact_name"],
+      },
     },
     {
       name: "kit_prep_card",
@@ -443,6 +462,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "kit_daily_checkin": {
         const msg = await dailyCheckin();
+        return text(msg);
+      }
+
+      case "kit_reconnect_context": {
+        const msg = await kitReconnectContext(String(args?.contact_name ?? ""));
         return text(msg);
       }
 

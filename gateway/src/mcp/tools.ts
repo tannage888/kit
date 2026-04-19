@@ -16,6 +16,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { ContextBinder, toCanonicalName, ThoughtType } from "../context-binding/index.js";
 import { buildCheckinReport, formatCheckinReport, type CheckinContact, type CheckinFollowUp } from "../services/checkin.js";
 import { buildPrepCard, buildDraftContext, type PrepContact, type PrepInteraction, type PrepFollowUp, type PrepBrainContext } from "../services/prep.js";
+import { buildReconnectContext, type ReconnectContact, type ReconnectInteraction } from "../services/reconnect.js";
 
 const _toolsDir = path.dirname(fileURLToPath(import.meta.url));
 const PEOPLE_DIR = path.resolve(_toolsDir, "..", "..", "..", "People");
@@ -625,6 +626,35 @@ export async function kitDraftContext(contactNameOrId: string, intent?: string):
   }));
 
   return buildDraftContext(prepContact, interactions, followUps, brainCtx, intent);
+}
+
+// ── Tool: kit_reconnect_context ───────────────────────────────────────────────
+
+export async function kitReconnectContext(contactNameOrId: string): Promise<string> {
+  const detail = await getContact(contactNameOrId);
+  if (!detail) return `Contact "${contactNameOrId}" not found.`;
+
+  const { contact: c, recent_interactions } = detail;
+
+  const rc: ReconnectContact = {
+    name: c.name,
+    tier: c.tier,
+    frequency: c.frequency,
+    last_contact: c.last_contact,
+    origin_story: c.origin_story,
+    special_interests: (c as any).special_interests ?? null,
+    sensitive_topics: (c as any).sensitive_topics ?? null,
+    preferred_channel: (c as any).preferred_channel ?? null,
+    notes: c.notes,
+  };
+
+  const interactions: ReconnectInteraction[] = recent_interactions.slice(0, 1).map((i) => ({
+    date: i.date,
+    channel: i.channel,
+    notes: i.notes,
+  }));
+
+  return buildReconnectContext(rc, interactions);
 }
 
 // ── Tool: kit_daily_checkin ───────────────────────────────────────────────────
