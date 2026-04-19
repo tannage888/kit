@@ -28,6 +28,8 @@ import {
   completeFollowUp,
   sweepNow,
   createContact,
+  setEnergy,
+  getEnergy,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -208,6 +210,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: [],
       },
     },
+    {
+      name: "kit_set_energy",
+      description:
+        "Set your social energy level for today. " +
+        "This affects which contacts Kit surfaces in /kit-checkin. " +
+        "high = full capacity, medium = selective, low = minimal interactions only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          level: {
+            type: "string",
+            enum: ["high", "medium", "low"],
+            description: "Your social energy level today",
+          },
+        },
+        required: ["level"],
+      },
+    },
+    {
+      name: "kit_get_energy",
+      description: "Check what energy level is recorded for today.",
+      inputSchema: { type: "object", properties: {}, required: [] },
+    },
   ],
 }));
 
@@ -352,6 +377,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const msg = await sweepNow(
           args?.contact_name ? String(args.contact_name) : undefined
         );
+        return text(msg);
+      }
+
+      case "kit_set_energy": {
+        const msg = await setEnergy(String(args?.level ?? ""));
+        return text(msg);
+      }
+
+      case "kit_get_energy": {
+        const msg = await getEnergy();
         return text(msg);
       }
 

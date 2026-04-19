@@ -539,6 +539,39 @@ export async function createContact(input: CreateContactInput): Promise<string> 
   return `Created contact "${input.name}" (${id}). Markdown written to People/${TIER_FOLDER[input.tier]}/${input.name}.md. DB row inserted. Open Brain observation captured.`;
 }
 
+// ── Tool: set_energy / get_energy ────────────────────────────────────────────
+
+export type EnergyLevel = "high" | "medium" | "low";
+
+export async function setEnergy(level: string): Promise<string> {
+  const normalized = level.toLowerCase();
+  if (!["high", "medium", "low"].includes(normalized)) {
+    return `Invalid energy level "${level}". Use: high, medium, or low.`;
+  }
+
+  const today = todayISO();
+  const { error } = await kitClient()
+    .from("energy_state")
+    .upsert({ day: today, level: normalized }, { onConflict: "day" });
+
+  if (error) throw new Error(`Failed to save energy level: ${error.message}`);
+  return `Energy set to **${normalized}** for today (${today}).`;
+}
+
+export async function getEnergy(): Promise<string> {
+  const today = todayISO();
+  const { data } = await kitClient()
+    .from("energy_state")
+    .select("level")
+    .eq("day", today)
+    .single();
+
+  if (!data?.level) {
+    return `No energy level set for today (${today}). Use \`/kit-energy high|medium|low\` to set it.`;
+  }
+  return `Today's energy level: **${data.level}** (${today}).`;
+}
+
 // ── Tool: complete_follow_up ──────────────────────────────────────────────────
 
 export async function completeFollowUp(
