@@ -30,6 +30,7 @@ import {
   createContact,
   setEnergy,
   getEnergy,
+  dailyCheckin,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -233,6 +234,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description: "Check what energy level is recorded for today.",
       inputSchema: { type: "object", properties: {}, required: [] },
     },
+    {
+      name: "kit_daily_checkin",
+      description:
+        "Run the daily relationship check-in. Reads today's energy level, loads all active " +
+        "contacts, computes drift and safety indicators, surfaces open follow-ups and birthday " +
+        "occasions, and returns a prioritised list of contacts to reach out to today. " +
+        "Requires energy to be set first via kit_set_energy.",
+      inputSchema: { type: "object", properties: {}, required: [] },
+    },
   ],
 }));
 
@@ -387,6 +397,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "kit_get_energy": {
         const msg = await getEnergy();
+        return text(msg);
+      }
+
+      case "kit_daily_checkin": {
+        const msg = await dailyCheckin();
         return text(msg);
       }
 

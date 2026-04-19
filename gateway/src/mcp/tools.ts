@@ -14,6 +14,7 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { ContextBinder, toCanonicalName, ThoughtType } from "../context-binding/index.js";
+import { buildCheckinReport, formatCheckinReport, type CheckinContact, type CheckinFollowUp } from "../services/checkin.js";
 
 const _toolsDir = path.dirname(fileURLToPath(import.meta.url));
 const PEOPLE_DIR = path.resolve(_toolsDir, "..", "..", "..", "People");
@@ -537,6 +538,63 @@ export async function createContact(input: CreateContactInput): Promise<string> 
   });
 
   return `Created contact "${input.name}" (${id}). Markdown written to People/${TIER_FOLDER[input.tier]}/${input.name}.md. DB row inserted. Open Brain observation captured.`;
+}
+
+// ── Tool: kit_daily_checkin ───────────────────────────────────────────────────
+
+export async function dailyCheckin(): Promise<string> {
+  const db = kitClient();
+  const today = todayISO();
+
+  // 1. Read today's energy level
+  const { data: energyRow } = await db
+    .from("energy_state")
+    .select("level")
+    .eq("day", today)
+    .single();
+
+  if (!energyRow?.level) {
+    return [
+      "⚡ No energy level set for today.",
+      "",
+      "Run `/kit-energy high`, `/kit-energy medium`, or `/kit-energy low` first,",
+      "then run `/kit-checkin` again.",
+    ].join("\n");
+  }
+
+  const energy = energyRow.level as "high" | "medium" | "low";
+
+  // 2. Load contacts with the fields we need
+  const { data: rows } = await db
+    .from("contacts")
+    .select("id, name, tier, frequency_days, last_contact, next_action, social_battery_cost, birthday")
+    .eq("active", true);
+
+  const contacts: CheckinContact[] = (rows ?? []).map((r: any) => ({
+    id: r.id,
+    name: r.name,
+    tier: r.tier,
+    frequency_days: r.frequency_days ?? 30,
+    last_contact: r.last_contact ?? null,
+    next_action: r.next_action ?? null,
+    social_battery_cost: r.social_battery_cost ?? null,
+    birthday: r.birthday ?? null,
+  }));
+
+  // 3. Load all open follow-ups
+  const { data: fuRows } = await db
+    .from("follow_ups")
+    .select("contact_id, text, contacts!inner(name)")
+    .eq("completed", false);
+
+  const followUps: CheckinFollowUp[] = (fuRows ?? []).map((r: any) => ({
+    contact_name: r.contacts?.name ?? r.contact_id,
+    text: r.text,
+  }));
+
+  // 4. Build and format the report
+  const report = buildCheckinReport(energy, contacts, followUps, today);
+  return formatCheckinReport(report);
 }
 
 // ── Tool: set_energy / get_energy ────────────────────────────────────────────

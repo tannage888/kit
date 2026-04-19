@@ -4,61 +4,76 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 
 ---
 
-## Current status: Phase 3 complete — Beginning Phase 4
+## Phase history
 
-### Phase 1 ✅ — Gateway REST-client refactor
-### Phase 2 ✅ — Markdown schema + parser (88 tests)
-### Phase 3 ✅ — Energy state + /kit-energy (98 tests, 2026-04-19)
-
-Phase 3 delivered:
-- `kit.energy_state` table migration
-- `EnergyService.setEnergy()` / `getEnergyForToday()`
-- `kit_set_energy` + `kit_get_energy` MCP tools
-- `.claude/commands/kit-energy.md` slash command
-- 10 tests in `energy.test.ts`
+- Phase 1 ✅ — Gateway REST-client refactor (84 tests)
+- Phase 2 ✅ — Markdown schema (88 tests)
+- Phase 3 ✅ — Energy state + /kit-energy (98 tests)
+- Phase 4 ✅ — Drift/safety/occasion pure functions (135 tests, 2026-04-19)
 
 ---
 
-## Phase 4 — Drift + safety + occasion pure functions
+## Current status: Phase 4 complete — Beginning Phase 5
 
-**Goal:** FR-04 (drift), FR-11 (safety indicator), FR-10 (occasions) as pure-functional, unit-tested logic.
+### Phase 5 — /kit-checkin (FR-01)
 
-**File to create:** `gateway/src/services/relationship-status.ts`
+**Goal:** `kit_daily_checkin` MCP tool + `/kit-checkin` slash command.
 
-### computeDriftStatus(last_contact, frequency_days, today)
+**File to add:** `gateway/src/mcp/tools.ts` — `dailyCheckin()` function
 
-Threshold table (days since last contact vs frequency_days):
-- green  → within frequency window (overdue ≤ 0 days)
-- yellow → 1–0.5× overdue (e.g. 30-day frequency: 1–15 days past due)
-- red    → 0.5–1× overdue (15–30 days past due for Monthly)
-- black  → more than 1× the frequency overdue
+**Logic:**
 
-Example: Monthly (30 days):
-- green  if days_since ≤ 30
-- yellow if days_since 31–45
-- red    if days_since 46–60
-- black  if days_since > 60
+```
+1. Read energy_state for today (via kitClient().from("energy_state")...)
+2. If null → return "No energy set. Run /kit-energy high|medium|low first."
+3. Load all active contacts from kit.contacts (need: id, name, tier, frequency_days, last_contact, next_action, social_battery_cost, birthday, whatsapp_capture)
+4. For each contact:
+   - computeDriftStatus(last_contact, frequency_days, today)
+   - computeSafetyIndicator(drift)
+   - computeOccasions(birthday, today)
+5. Filter by energy level:
+   - high:   all contacts with drift != "green" (overdue + due)
+             + contacts due in next 7 days (next_action <= today+7)
+   - medium: up to 7 contacts; prefer Low battery_cost contacts; exclude green
+   - low:    up to 3 contacts; only Low battery_cost; exclude green
+6. Sort: black first, then red, yellow; within same color sort by tier (1 first)
+7. Return structured JSON as a markdown summary string
+```
 
-### computeSafetyIndicator(drift)
+**Return shape (as formatted markdown string):**
+```
+## Daily Check-in
 
-Per spec FR-11:
-- green  → "All good 🟢"
-- yellow → "Check in soon 🟡"
-- red    → "Reaching out recommended 🔴"
-- black  → "Relationship at risk ⚫"
+Energy: medium
 
-### computeOccasions(contact, today): OccasionTrigger[]
+### Needs attention (3)
 
-Types:
-- birthday: if contact.birthday, trigger when today is within 2 days before or on the birthday (year-agnostic)
-- no other triggers needed for Phase 4
+- **Alice** (Inner Circle) — black drift ⚫ | "It's been a long time..."
+  Last contact: 2026-01-15 | Next action was: 2026-02-15
+  🎂 Birthday tomorrow!
 
-### Tests
+- **Bob** (Active) — red drift 🔴 | "It's been a while..."
+  ...
 
-`gateway/src/services/relationship-status.test.ts`
-- table-driven tests for all drift thresholds (green/yellow/red/black)
-- safety indicator maps drift to correct copy
-- birthday occasion triggers ±2 days
-- no birthday → empty occasions array
+### Follow-ups (2 open)
+- Alice: Send the article
+- Bob: Book table
+
+### Reconnection suggestions
+- Dormant contacts: Dave, Carol (use /kit-reconnect <name>)
+```
+
+**Test file:** `gateway/src/mcp/checkin.test.ts`
+
+Tests:
+- high energy: returns all overdue contacts
+- medium energy: caps at 7, prefers low battery cost
+- low energy: caps at 3, only low battery cost
+- no energy set: returns prompt
+- occasions surfaced in output
+- reconnection suggestions for black-tier contacts
+- no contacts at all: graceful empty response
+
+**Slash command:** `.claude/commands/kit-checkin.md`
 
 Don't emit `<promise>KIT_V1_COMPLETE</promise>` until all 10 phases are green.
