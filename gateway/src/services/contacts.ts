@@ -30,7 +30,7 @@ export class ContactRegistry {
     const { data, error } = await this.supabase
       .schema("kit")
       .from("contacts")
-      .select("id, name, whatsapp, tier, wa_capture, frequency, frequency_days, last_contact")
+      .select("id, name, whatsapp, tier, wa_capture, frequency, frequency_days, last_contact, whatsapp_capture")
       .not("whatsapp", "is", null);
 
     if (error) {
@@ -51,6 +51,7 @@ export class ContactRegistry {
         frequency: row.frequency,
         frequency_days: row.frequency_days ?? frequencyToDays(row.frequency),
         last_contact: row.last_contact,
+        whatsapp_capture: row.whatsapp_capture === "enabled" ? "enabled" : "disabled",
       };
       this.register(contact);
     }

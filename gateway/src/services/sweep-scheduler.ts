@@ -20,7 +20,6 @@ import { config } from "../config.js";
 import { ContactRegistry } from "./contacts.js";
 import { CapturePipeline } from "./capture.js";
 import { HistoryFetcher } from "./history-fetcher.js";
-import { WhatsAppConnection } from "./whatsapp.js";
 import type {
   ContactSweepResult,
   SweepResult,
@@ -38,7 +37,6 @@ export class SweepScheduler {
   private nextSweepAt: Date | null = null;
 
   constructor(
-    private wa: WhatsAppConnection,
     private contacts: ContactRegistry,
     private capture: CapturePipeline,
     private fetcher: HistoryFetcher
@@ -99,8 +97,11 @@ export class SweepScheduler {
     const details: ContactSweepResult[] = [];
 
     try {
-      // Only sweep if WhatsApp is actually connected
-      if (this.wa.getStatus() !== "connected") {
+      // Only sweep if the external daemon reports a live WhatsApp connection
+      const daemonStatus = await fetch(`${config.EXTERNAL_GATEWAY_URL}/api/status`)
+        .then((r) => r.json() as Promise<{ connection: string }>)
+        .catch(() => null);
+      if (!daemonStatus || daemonStatus.connection !== "connected") {
         console.warn("⚠️  WhatsApp not connected — sweep aborted.");
         const result: SweepResult = {
           startedAt,

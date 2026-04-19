@@ -4,9 +4,22 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 
 ---
 
-## Current status: Stage A complete — Phase 1 not started
+## Current status: Phase 1 complete — Beginning Phase 2
 
-Stage A (pre-implementation setup) was done by hand on 2026-04-19 before ralph started. Summary:
+### Phase 1 — Gateway REST-client refactor ✅ DONE (2026-04-19)
+
+All 8 deliverables landed. Final test run: **84 passed, 0 failed**. `tsc --noEmit` clean.
+
+- [x] `history-fetcher.ts` refactored to REST client (`fetch` not Baileys)
+- [x] `history-fetcher.test.ts` updated to mock fetch
+- [x] `sweep-scheduler.ts` refactored (checks daemon `/api/status` not `wa.getStatus()`)
+- [x] `sweep-scheduler.test.ts` fixed (Supabase `.schema()` chain, fetch mock)
+- [x] `routes/api.ts` rewritten (no `wa` param, `POST /incoming-message`, status proxy)
+- [x] `index.ts` simplified (no Baileys boot)
+- [x] `markdown.ts` regex bugs fixed (`extractSection`, `parseFollowUps`)
+- [x] `src/routes/api.test.ts` — new test file (5 tests)
+
+### Stage A checklist
 
 - [x] `People/` backed up to `People.backup-2026-04-19/` (42 files)
 - [x] Spec renumbered (FR-00..FR-11, no duplicates, §5.9 filled)
@@ -20,21 +33,19 @@ Stage A (pre-implementation setup) was done by hand on 2026-04-19 before ralph s
 - [x] `CLAUDE.md` updated for the new architecture
 - [x] Git init + initial commit + push to `github.com/tannage888/kit`
 
-## Known broken state entering Phase 1
-
-Deleting `whatsapp.ts` and `message-store.ts` in Stage A intentionally breaks these files (they still import `WhatsAppConnection`):
-
-- `gateway/src/index.ts`
-- `gateway/src/services/history-fetcher.ts`
-- `gateway/src/services/sweep-scheduler.ts`
-- `gateway/src/routes/api.ts`
-- `gateway/src/services/history-fetcher.test.ts`
-- `gateway/src/services/sweep-scheduler.test.ts`
-
-**Phase 1 fixes all of these** per `docs/implementation-plan.md` Stage B Phase 1.
-
-`npm test` and `npx tsc --noEmit` are expected to fail until Phase 1 completes.
+---
 
 ## Next iteration
 
-Begin **Phase 1 — Gateway REST-client refactor**. See `docs/implementation-plan.md` for full deliverables and test criteria. Don't emit `<promise>KIT_V1_COMPLETE</promise>` until all 10 phases are green.
+**Phase 2 — Markdown schema + parser updates**
+
+New frontmatter fields: `social_battery_cost`, `origin_story`, `special_interests`, `sensitive_topics`, `preferred_channel`, `birthday`, `whatsapp_capture`.
+
+Deliverables:
+1. Update `TrackedContact` type in `gateway/src/types.ts`
+2. Update `parseContactFile()` in `sync.ts` to read new fields
+3. Update markdown writer (Supabase → markdown) in `sync.ts` to write them back
+4. Supabase migration: `gateway/supabase/migrations/20260419_phase2_contact_fields.sql`
+5. Extend `sync.test.ts` round-trip test: new fields preserved
+
+Don't emit `<promise>KIT_V1_COMPLETE</promise>` until all 10 phases are green.

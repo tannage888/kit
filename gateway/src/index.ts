@@ -1,24 +1,21 @@
 /**
- * Kit WhatsApp Gateway — Entry Point
+ * Kit Gateway — Entry Point (v1.0)
  *
- * Boots the Baileys WhatsApp connection, loads tracked contacts,
- * wires up the message router, capture pipeline, sweep scheduler,
- * and starts the Express REST API.
+ * Boots the gateway without an embedded Baileys connection.
+ * WhatsApp is handled by the dedicated claude_whatsapp_integration daemon
+ * on EXTERNAL_GATEWAY_URL (default http://127.0.0.1:3142). Messages are
+ * pushed to this gateway via POST /api/incoming-message.
  *
  * Run: npm run dev  (development with hot reload)
  *      npm start    (production)
  *
- * First-time setup:
- *   Set WHATSAPP_PHONE=+447700900123 in .env, then start the gateway.
- *   An 8-character pairing code will appear in the terminal.
- *   Enter it in WhatsApp > Settings > Linked Devices > Link a Device >
- *   Link with phone number. The gateway will connect and save auth state.
- *   On subsequent starts, no code is needed.
+ * Ensure the WhatsApp daemon is running before starting the gateway,
+ * but the gateway is tolerant of the daemon being temporarily unavailable
+ * (sweep skips, live capture simply doesn't receive pushes).
  */
 
 import express from "express";
 import { config } from "./config.js";
-import { WhatsAppConnection } from "./services/whatsapp.js";
 import { ContactRegistry } from "./services/contacts.js";
 import { CapturePipeline } from "./services/capture.js";
 import { MessageRouter } from "./services/message-router.js";
@@ -31,7 +28,7 @@ const startedAt = Date.now();
 
 async function main() {
   console.log("╔══════════════════════════════════════╗");
-  console.log("║    Kit WhatsApp Gateway v0.2.0       ║");
+  console.log("║    Kit Gateway v1.0.0                ║");
   console.log("╚══════════════════════════════════════╝");
   console.log();
 
@@ -41,11 +38,10 @@ async function main() {
   const contacts = new ContactRegistry();
   const capture = new CapturePipeline(contacts);
   const messageRouter = new MessageRouter(contacts, capture);
-  const wa = new WhatsAppConnection();
-  const historyFetcher = new HistoryFetcher(wa);
-  const sweepScheduler = new SweepScheduler(wa, contacts, capture, historyFetcher);
+  const fetcher = new HistoryFetcher(config.EXTERNAL_GATEWAY_URL);
+  const sweepScheduler = new SweepScheduler(contacts, capture, fetcher);
 
-  // ── 2. Start bidirectional sync ────────────────────────
+  // ── 2. Start bidirectional markdown↔Supabase sync ─────
 
   await sync.start();
 
@@ -54,37 +50,18 @@ async function main() {
   console.log("📇 Loading tracked contacts...");
   await contacts.loadFromDatabase();
 
-  // ── 4. Wire message events to the live router ──────────
+  // ── 4. Start sweep scheduler ───────────────────────────
+  // Starts immediately; sweeps skip gracefully if daemon is unavailable.
 
-  wa.on("message:received", (msg) => messageRouter.handleMessage(msg));
-  wa.on("message:sent", (msg) => messageRouter.handleMessage(msg));
+  sweepScheduler.start(config.SWEEP_INTERVAL_DAYS);
 
-  wa.on("connection:status", (status) => {
-    console.log(`📡 WhatsApp status: ${status}`);
-  });
-
-  // After the connection opens, resolve @lid JIDs for all tracked contacts,
-  // then start the sweep scheduler. The 30s delay in the scheduler gives
-  // history sync time to buffer messages before the first sweep runs.
-  wa.on("connection:open", () => {
-    const phones = contacts.getAll().map((c) => c.whatsapp);
-    wa.resolveContactLids(phones).then(() => {
-      sweepScheduler.start(config.SWEEP_INTERVAL_DAYS);
-    });
-  });
-
-  // ── 5. Connect to WhatsApp ─────────────────────────────
-
-  console.log("📱 Connecting to WhatsApp...");
-  await wa.connect();
-
-  // ── 6. Start REST API ──────────────────────────────────
+  // ── 5. Start REST API ──────────────────────────────────
 
   const app = express();
   app.use(express.json());
 
   const apiRouter = createApiRouter(
-    wa, contacts, messageRouter, capture, sweepScheduler, startedAt
+    contacts, messageRouter, capture, sweepScheduler, startedAt
   );
   app.use("/api", apiRouter);
 
@@ -94,23 +71,23 @@ async function main() {
     console.log();
     console.log(`🚀 REST API listening on http://localhost:${config.PORT}`);
     console.log(`   Status:      GET  /api/status`);
-    console.log(`   Auth:        GET  /api/auth/status`);
-    console.log(`   Send:        POST /api/send`);
-    console.log(`   Capture:     POST /api/capture/:contactId`);
-    console.log(`   Review:      GET  /api/captures/pending`);
+    console.log(`   Incoming:    POST /api/incoming-message`);
+    console.log(`   Contacts:    GET  /api/contacts`);
+    console.log(`   Captures:    GET  /api/captures/pending`);
     console.log(`   Sweep:       POST /api/sweep/run`);
     console.log(`   Sweep status:GET  /api/sweep/status`);
     console.log();
+    console.log(`📡 WhatsApp daemon: ${config.EXTERNAL_GATEWAY_URL}`);
+    console.log();
   });
 
-  // ── 7. Graceful shutdown ───────────────────────────────
+  // ── 6. Graceful shutdown ───────────────────────────────
 
   const shutdown = async (signal: string) => {
     console.log(`\n${signal} received — shutting down...`);
     sweepScheduler.stop();
     messageRouter.shutdown();
     await sync.stop();
-    await wa.disconnect();
     process.exit(0);
   };
 

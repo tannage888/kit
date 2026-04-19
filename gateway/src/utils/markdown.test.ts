@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import {
   slugify,
   frequencyToDays,
@@ -6,6 +9,7 @@ import {
   parseInteractionLog,
   parseFollowUps,
   extractPhone,
+  parseContactFile,
   setFrontmatterField,
   prependInteractionEntry,
   appendFollowUp,
@@ -338,5 +342,130 @@ describe("uncompleteFollowUp", () => {
   it("leaves other bullets unchanged", () => {
     const result = uncompleteFollowUp(completed, "Send the doc");
     expect(result).toContain("- Book a table");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseContactFile — Phase 2 new fields
+// ---------------------------------------------------------------------------
+
+function writeTmp(content: string): string {
+  const tmpPath = path.join(os.tmpdir(), `kit-test-${Date.now()}.md`);
+  fs.writeFileSync(tmpPath, content, "utf-8");
+  return tmpPath;
+}
+
+describe("parseContactFile — new Phase 2 fields", () => {
+  const tmpFiles: string[] = [];
+
+  afterEach(() => {
+    for (const f of tmpFiles) {
+      try { fs.unlinkSync(f); } catch { /* ignore */ }
+    }
+    tmpFiles.length = 0;
+  });
+
+  it("reads preferred_channel, birthday, whatsapp_capture from frontmatter", () => {
+    const md = `---
+name: Alice Example
+frequency: Monthly
+whatsapp: "+447700900001"
+preferred_channel: whatsapp
+birthday: "1990-05-15"
+whatsapp_capture: enabled
+social_battery: medium
+---
+
+## How We Met
+Met at a conference.
+
+## Interests & Hooks
+Board games, cycling
+
+## Sensitive Topics
+Don't mention their ex
+`;
+    const tmpPath = writeTmp(md);
+    tmpFiles.push(tmpPath);
+
+    const { contact } = parseContactFile(tmpPath, 2);
+
+    expect(contact.preferred_channel).toBe("whatsapp");
+    expect(contact.birthday).toBe("1990-05-15");
+    expect(contact.whatsapp_capture).toBe("enabled");
+    expect(contact.special_interests).toContain("Board games");
+    expect(contact.sensitive_topics).toContain("Don't mention");
+    expect(contact.social_battery_cost).toBe("Medium");
+  });
+
+  it("defaults whatsapp_capture to disabled when field is missing", () => {
+    const md = `---
+name: Bob Legacy
+frequency: Monthly
+whatsapp: "+447700900002"
+---
+
+## Background
+Old contact, no new fields.
+`;
+    const tmpPath = writeTmp(md);
+    tmpFiles.push(tmpPath);
+
+    const { contact } = parseContactFile(tmpPath, 3);
+
+    expect(contact.whatsapp_capture).toBe("disabled");
+    expect(contact.preferred_channel).toBeNull();
+    expect(contact.birthday).toBeNull();
+    expect(contact.special_interests).toBeNull();
+    expect(contact.sensitive_topics).toBeNull();
+  });
+
+  it("special_interests and sensitive_topics are separate from notes", () => {
+    const md = `---
+name: Carol Test
+frequency: Monthly
+---
+
+## Interests & Hooks
+Reading, hiking
+
+## Sensitive Topics
+Health issues
+
+## Notes
+Some general notes here.
+`;
+    const tmpPath = writeTmp(md);
+    tmpFiles.push(tmpPath);
+
+    const { contact } = parseContactFile(tmpPath, 2);
+
+    expect(contact.special_interests).toBe("Reading, hiking");
+    expect(contact.sensitive_topics).toBe("Health issues");
+    expect(contact.notes).toBe("Some general notes here.");
+  });
+
+  it("tolerates legacy contact with no optional sections", () => {
+    const md = `---
+name: Dave Minimal
+frequency: Quarterly
+whatsapp: "+447700900003"
+---
+
+## Interaction Log
+
+### 2026-01-01 — Call
+Brief check-in.
+`;
+    const tmpPath = writeTmp(md);
+    tmpFiles.push(tmpPath);
+
+    const { contact, interactions } = parseContactFile(tmpPath, 3);
+
+    expect(contact.special_interests).toBeNull();
+    expect(contact.sensitive_topics).toBeNull();
+    expect(contact.origin_story).toBeNull();
+    expect(contact.notes).toBeNull();
+    expect(interactions).toHaveLength(1);
   });
 });

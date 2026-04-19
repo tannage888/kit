@@ -235,6 +235,9 @@ export class SyncService {
       if (row.last_contact) raw = setFrontmatterField(raw, "last_contact", row.last_contact);
       if (row.next_action) raw = setFrontmatterField(raw, "next_action", row.next_action);
       if (row.whatsapp) raw = setFrontmatterField(raw, "whatsapp", `"${row.whatsapp}"`);
+      if (row.preferred_channel) raw = setFrontmatterField(raw, "preferred_channel", row.preferred_channel);
+      if (row.birthday) raw = setFrontmatterField(raw, "birthday", `"${row.birthday}"`);
+      if (row.whatsapp_capture) raw = setFrontmatterField(raw, "whatsapp_capture", row.whatsapp_capture);
       fs.writeFileSync(filePath, raw, "utf-8");
     } catch (err) {
       console.error(`  ✗ frontmatter update failed:`, err);

@@ -27,13 +27,15 @@ const mockSupabaseUpsert = vi.fn().mockResolvedValue({ error: null });
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          single: mockSupabaseSingle,
+    schema: () => ({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: mockSupabaseSingle,
+          }),
         }),
+        upsert: mockSupabaseUpsert,
       }),
-      upsert: mockSupabaseUpsert,
     }),
   }),
 }));
@@ -50,6 +52,7 @@ function makeContact(overrides: Partial<TrackedContact> = {}): TrackedContact {
     frequency: "Monthly",
     frequency_days: 30,
     last_contact: "2026-03-01",
+    whatsapp_capture: "disabled",
     ...overrides,
   };
 }
@@ -74,10 +77,6 @@ function makeThread(contact: TrackedContact, messageCount = 3): ConversationThre
 // ── Build scheduler with mocked deps ─────────────────────────────────────────
 
 function makeScheduler(contacts: TrackedContact[], threads: ConversationThread[][]) {
-  const mockWa = {
-    getStatus: vi.fn().mockReturnValue("connected"),
-  };
-
   const mockContacts = {
     getAll: vi.fn().mockReturnValue(contacts),
   };
@@ -94,13 +93,12 @@ function makeScheduler(contacts: TrackedContact[], threads: ConversationThread[]
   };
 
   const scheduler = new SweepScheduler(
-    mockWa as any,
     mockContacts as any,
     mockCapture as any,
     mockFetcher as any
   );
 
-  return { scheduler, mockWa, mockContacts, mockFetcher, mockCapture };
+  return { scheduler, mockContacts, mockFetcher, mockCapture };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -110,10 +108,16 @@ describe("SweepScheduler", () => {
     mockSupabaseSingle.mockResolvedValue({ data: null, error: null });
     mockSupabaseUpsert.mockResolvedValue({ error: null });
     vi.useFakeTimers();
+    // Default: daemon reports connected
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ connection: "connected" }),
+    } as unknown as Response);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("skips contacts with wa_capture=off", async () => {
@@ -186,8 +190,12 @@ describe("SweepScheduler", () => {
 
   it("aborts when WhatsApp is not connected", async () => {
     const contact = makeContact();
-    const { scheduler, mockWa, mockFetcher } = makeScheduler([contact], [[]]);
-    mockWa.getStatus.mockReturnValue("connecting");
+    const { scheduler, mockFetcher } = makeScheduler([contact], [[]]);
+    // Override the default "connected" mock for this test
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ connection: "disconnected" }),
+    } as unknown as Response);
 
     const result = await scheduler.runSweep();
 
@@ -198,7 +206,6 @@ describe("SweepScheduler", () => {
   it("returns null when a sweep is already running", async () => {
     const contact = makeContact();
     // Make fetchSince hang so the first sweep doesn't complete
-    const mockWa = { getStatus: vi.fn().mockReturnValue("connected") };
     const mockContacts = { getAll: vi.fn().mockReturnValue([contact]) };
     const mockFetcher = {
       fetchSince: vi.fn().mockImplementation(
@@ -208,7 +215,6 @@ describe("SweepScheduler", () => {
     const mockCapture = { processAndCommit: vi.fn() };
 
     const scheduler = new SweepScheduler(
-      mockWa as any,
       mockContacts as any,
       mockCapture as any,
       mockFetcher as any

@@ -20,6 +20,7 @@ export interface TrackedContact {
   frequency: ContactFrequency;
   frequency_days: number; // 7 | 30 | 90 — used to compute next_action
   last_contact: string; // ISO date
+  whatsapp_capture: "enabled" | "disabled"; // opt-in flag per contact
 }
 
 // ── Message types ──────────────────────────────────────────

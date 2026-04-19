@@ -1,15 +1,16 @@
 /**
- * REST API Routes
+ * REST API Routes — Kit Gateway
  *
- * Endpoints exposed by the gateway for the Kit mobile app to call.
- * Runs on the local network (or tunnelled via Tailscale/Cloudflare).
+ * v1.0: Kit is a REST client of the dedicated claude_whatsapp_integration
+ * daemon. The gateway no longer manages its own Baileys connection.
  *
- * All endpoints return JSON. Errors use standard HTTP status codes.
+ * Removed from v0: /auth/status, /send, /debug/store (all Baileys-specific).
+ * Added: POST /api/incoming-message (daemon push endpoint).
  */
 
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { WhatsAppConnection } from "../services/whatsapp.js";
+import { config } from "../config.js";
 import { ContactRegistry } from "../services/contacts.js";
 import { MessageRouter } from "../services/message-router.js";
 import { CapturePipeline } from "../services/capture.js";
@@ -18,7 +19,6 @@ import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
 import type { CaptureMode, GatewayStatus, TrackedContact } from "../types.js";
 
 export function createApiRouter(
-  wa: WhatsAppConnection,
   contacts: ContactRegistry,
   router: MessageRouter,
   capture: CapturePipeline,
@@ -29,11 +29,15 @@ export function createApiRouter(
 
   // ── Health / status ──────────────────────────────────────
 
-  api.get("/status", (_req: Request, res: Response) => {
+  api.get("/status", async (_req: Request, res: Response) => {
+    const ext = await fetch(`${config.EXTERNAL_GATEWAY_URL}/api/status`)
+      .then((r) => r.json() as Promise<{ connection?: string }>)
+      .catch(() => ({ connection: "unavailable" }));
+
     const last = sweep.getLastResult();
     const next = sweep.getNextSweepAt();
     const status: GatewayStatus = {
-      connection: wa.getStatus(),
+      connection: (ext.connection ?? "unavailable") as GatewayStatus["connection"],
       trackedContacts: contacts.size,
       activeThreads: router.activeThreadCount,
       pendingCaptures: capture.pendingCount,
@@ -44,55 +48,27 @@ export function createApiRouter(
     res.json(status);
   });
 
-  // ── Auth status ──────────────────────────────────────────
+  // ── Incoming message push (from the WhatsApp daemon) ────
 
-  api.get("/auth/status", (_req: Request, res: Response) => {
-    const status = wa.getStatus();
-    const pairingCode = wa.getPairingCode();
-    res.json({
-      status,
-      paired: status === "connected",
-      pairingCode: pairingCode ?? null,
-      instructions: pairingCode
-        ? "Enter this code in WhatsApp > Settings > Linked Devices > Link a Device > Link with phone number"
-        : null,
-    });
+  const incomingMsgSchema = z.object({
+    remoteJid: z.string().min(1),
+    fromMe: z.boolean(),
+    body: z.string(),
+    timestamp: z.number(),
+    messageId: z.string(),
   });
 
-  // ── Send a message via Baileys ───────────────────────────
-
-  const sendSchema = z.object({
-    contact_id: z.string(),
-    message: z.string().min(1).max(5000),
-  });
-
-  api.post("/send", async (req: Request, res: Response) => {
-    const parsed = sendSchema.safeParse(req.body);
+  api.post("/incoming-message", (req: Request, res: Response) => {
+    const parsed = incomingMsgSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
+      res.status(400).json({ error: "invalid_body", details: parsed.error.issues });
       return;
     }
-
-    const contact = contacts.getById(parsed.data.contact_id);
-    if (!contact) {
-      res.status(404).json({ error: "Contact not found" });
-      return;
-    }
-
-    if (!contact.whatsapp) {
-      res.status(400).json({ error: "Contact has no WhatsApp number" });
-      return;
-    }
-
-    try {
-      const messageId = await wa.sendMessage(contact.whatsapp, parsed.data.message);
-      res.json({ ok: true, messageId });
-    } catch (err: any) {
-      res.status(502).json({ error: "Failed to send via WhatsApp", detail: err.message });
-    }
+    router.handleMessage(parsed.data);
+    res.json({ ok: true });
   });
 
-  // ── Generate a wa.me deep link (v1.0 fallback) ──────────
+  // ── Deep link ────────────────────────────────────────────
 
   const linkSchema = z.object({
     number: z.string(),
@@ -105,7 +81,6 @@ export function createApiRouter(
       res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
       return;
     }
-
     try {
       const url = buildWhatsAppLink(parsed.data.number, parsed.data.message);
       res.json({ url });
@@ -146,7 +121,7 @@ export function createApiRouter(
   });
 
   api.delete("/contacts/:id", (req: Request, res: Response) => {
-    const removed = contacts.unregister(req.params.id);
+    const removed = contacts.unregister(req.params["id"] as string);
     res.json({ ok: removed });
   });
 
@@ -162,16 +137,15 @@ export function createApiRouter(
       res.status(400).json({ error: "Invalid mode", details: parsed.error.issues });
       return;
     }
-    const ok = contacts.setCaptureMode(req.params.id, parsed.data.mode as CaptureMode);
+    const ok = contacts.setCaptureMode(req.params["id"] as string, parsed.data.mode as CaptureMode);
     res.json({ ok });
   });
 
   // ── Capture pipeline controls ────────────────────────────
 
-  /** Manually trigger capture for a contact's current thread */
   api.post("/capture/:contactId", async (req: Request, res: Response) => {
     try {
-      const ok = await router.triggerCapture(req.params.contactId);
+      const ok = await router.triggerCapture(req.params["contactId"] as string);
       if (!ok) {
         res.status(404).json({ error: "No active thread for this contact" });
         return;
@@ -182,24 +156,24 @@ export function createApiRouter(
     }
   });
 
-  /** Capture a single message by ID */
   api.post("/capture/:contactId/message/:messageId", async (req: Request, res: Response) => {
     try {
-      const ok = await router.captureSingleMessage(req.params.contactId, req.params.messageId);
+      const ok = await router.captureSingleMessage(
+        req.params["contactId"] as string,
+        req.params["messageId"] as string
+      );
       res.json({ ok });
     } catch (err: any) {
       res.status(500).json({ error: "Capture failed", detail: err.message });
     }
   });
 
-  /** Get all pending capture reviews */
   api.get("/captures/pending", (_req: Request, res: Response) => {
     res.json(capture.getAllPendingReviews());
   });
 
-  /** Get a specific pending review */
   api.get("/captures/pending/:contactId", (req: Request, res: Response) => {
-    const review = capture.getPendingReview(req.params.contactId);
+    const review = capture.getPendingReview(req.params["contactId"] as string);
     if (!review) {
       res.status(404).json({ error: "No pending review for this contact" });
       return;
@@ -207,10 +181,9 @@ export function createApiRouter(
     res.json(review);
   });
 
-  /** Confirm a pending capture → write to Open Brain */
   api.post("/captures/confirm/:contactId", async (req: Request, res: Response) => {
     try {
-      const ok = await capture.confirm(req.params.contactId);
+      const ok = await capture.confirm(req.params["contactId"] as string);
       if (!ok) {
         res.status(404).json({ error: "No pending review to confirm" });
         return;
@@ -221,16 +194,9 @@ export function createApiRouter(
     }
   });
 
-  /** Dismiss a pending capture → discard without storing */
   api.post("/captures/dismiss/:contactId", (req: Request, res: Response) => {
-    const ok = capture.dismiss(req.params.contactId);
+    const ok = capture.dismiss(req.params["contactId"] as string);
     res.json({ ok });
-  });
-
-  // ── Debug ────────────────────────────────────────────────
-
-  api.get("/debug/store", (_req: Request, res: Response) => {
-    res.json(wa.getStoreStats());
   });
 
   // ── Sweep controls ───────────────────────────────────────
@@ -239,14 +205,12 @@ export function createApiRouter(
     contact_name: z.string().optional(),
   });
 
-  /** Trigger an immediate sweep (optionally for a single contact) */
   api.post("/sweep/run", async (req: Request, res: Response) => {
     const parsed = sweepRunSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
       return;
     }
-
     try {
       const result = await sweep.runSweep(parsed.data.contact_name);
       if (!result) {
@@ -259,7 +223,6 @@ export function createApiRouter(
     }
   });
 
-  /** Get the last sweep result and next scheduled time */
   api.get("/sweep/status", (_req: Request, res: Response) => {
     res.json({
       lastResult: sweep.getLastResult(),

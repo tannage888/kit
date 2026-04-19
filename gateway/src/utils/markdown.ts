@@ -23,6 +23,11 @@ export interface ContactRow {
   next_action: string | null;
   social_battery_cost: string | null;
   origin_story: string | null;
+  special_interests: string | null;
+  sensitive_topics: string | null;
+  preferred_channel: string | null;
+  birthday: string | null;
+  whatsapp_capture: "enabled" | "disabled";
   notes: string | null;
   whatsapp: string | null;
   active: boolean;
@@ -79,9 +84,11 @@ export function relationshipToTier(rel: string): number {
 
 export function extractSection(body: string, ...headers: string[]): string | null {
   for (const header of headers) {
+    // No 'm' flag — $ matches end-of-string only, preventing premature stop
+    // on blank lines after the section header.
     const regex = new RegExp(
-      `^##\\s+${header}[^\\n]*\\n([\\s\\S]*?)(?=^##\\s|$)`,
-      "mi"
+      `(?:^|\\n)##\\s+${header}[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s|$)`,
+      "i"
     );
     const match = body.match(regex);
     if (match) return match[1].trim() || null;
@@ -127,7 +134,9 @@ export function parseInteractionLog(body: string, contactId: string): Interactio
 
 export function parseFollowUps(body: string, contactId: string): FollowUpRow[] {
   const rows: FollowUpRow[] = [];
-  const followUpRegex = /\*\*Follow-ups:\*\*\n([\s\S]*?)(?=\n\n###|\n\n##|$)/gm;
+  // No 'm' flag — $ must match end-of-string so the lazy capture isn't
+  // cut short at every end-of-line.
+  const followUpRegex = /\*\*Follow-ups:\*\*\n([\s\S]*?)(?=\n\n###|\n\n##|$)/g;
   let match;
 
   while ((match = followUpRegex.exec(body)) !== null) {
@@ -179,14 +188,14 @@ export function parseContactFile(
   }
 
   const origin_story = extractSection(content, "How We Met", "Background", "Role & Context");
+  const special_interests = extractSection(content, "Interests & Hooks", "Interests") ?? null;
+  const sensitive_topics = extractSection(content, "Sensitive Topics") ?? null;
+  const preferred_channel = fm.preferred_channel ? String(fm.preferred_channel) : null;
+  const birthday = fm.birthday ? String(fm.birthday) : null;
+  const whatsapp_capture: "enabled" | "disabled" =
+    fm.whatsapp_capture === "enabled" ? "enabled" : "disabled";
 
-  const noteParts: string[] = [];
-  const interests = extractSection(content, "Interests & Hooks", "Interests");
-  if (interests) noteParts.push(`**Interests:** ${interests}`);
-  const sensitive = extractSection(content, "Sensitive Topics");
-  if (sensitive) noteParts.push(`**Sensitive:** ${sensitive}`);
   const notesSection = extractSection(content, "Notes", "Family");
-  if (notesSection) noteParts.push(notesSection);
 
   return {
     contact: {
@@ -199,7 +208,12 @@ export function parseContactFile(
       next_action: fm.next_action ? String(fm.next_action) : null,
       social_battery_cost,
       origin_story: origin_story ?? null,
-      notes: noteParts.length ? noteParts.join("\n\n") : null,
+      special_interests,
+      sensitive_topics,
+      preferred_channel,
+      birthday,
+      whatsapp_capture,
+      notes: notesSection ?? null,
       whatsapp: (fm.whatsapp ? String(fm.whatsapp) : null) ?? extractPhone(content),
       active: true,
     },
