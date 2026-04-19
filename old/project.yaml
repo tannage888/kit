@@ -1,0 +1,20 @@
+name: kit
+display_name: Kit
+type: app
+status: active
+description: React Native/Expo personal relationship management app — surfaces overdue contacts, provides context before messaging, logs interactions to Open Brain. Supabase backend.
+spec_file: Kit-Requirements.md
+codebase:
+  path: C:\Users\seang\OneDrive\Documents\ClaudeWork\projects\kit
+  git: false
+  git_remote: ""
+next_actions: []
+blockers: []
+tags:
+  - app
+  - react-native
+  - mobile
+  - contact-management
+  - supabase
+created: 2026-03-23
+last_reviewed: 2026-04-03

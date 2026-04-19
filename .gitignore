@@ -1,0 +1,39 @@
+# Personal data — never commit
+People/
+People.backup-*/
+old/*.csv
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Deps + build
+node_modules/
+dist/
+build/
+web-build/
+*.tsbuildinfo
+.expo/
+
+# Test + coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# WhatsApp auth state
+gateway/auth_state/
+auth_state/
+
+# Claude settings (but DO commit .claude/commands/ once Phase 3 creates them)
+.claude/settings.local.json

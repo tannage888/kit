@@ -1,0 +1,806 @@
+{
+  "contacts": [
+    {
+      "id": "potato",
+      "name": "Potato",
+      "tier": 1,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-07",
+      "next_action": "2026-04-07",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "idris_elba",
+      "name": "Idris Elba",
+      "tier": 1,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-07",
+      "next_action": "2026-04-07",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "adele",
+      "name": "Adele",
+      "tier": 1,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-06",
+      "next_action": "2026-04-06",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "bono",
+      "name": "Bono",
+      "tier": 1,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-06",
+      "next_action": "2026-04-06",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "beyonce",
+      "name": "Beyoncé",
+      "tier": 1,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-02-27",
+      "next_action": "2026-03-27",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "cate_blanchett",
+      "name": "Cate Blanchett",
+      "tier": 1,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-05",
+      "next_action": "2026-04-05",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "salma_hayek",
+      "name": "Salma Hayek",
+      "tier": 1,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-20",
+      "next_action": "2026-04-19",
+      "social_battery_cost": "Medium",
+      "origin_story": "Salma is Daniel's massage therapist and long-time close friend, going back to at least 2015. She is Chadwick and Zendaya Hayek's mum. Daniel trained both kids in martial arts / self-defence when they were younger. Denzel is Salma's husband — a runner (marathon training).",
+      "notes": "**Interests:** Running (recently started again), travel (India, Cyprus, Sardinia), fitness/spin classes, health and wellness. Salma runs her massage business entirely via WhatsApp with no advertising.\n\nSalma is Turkish-Cypriot. She uses Turkish terms of endearment (\"canım\", \"annem\"). She's very family-oriented and deeply invested in Chadwick and Zendaya's wellbeing. Daniel is a trusted confidant — she shares concerns about Chadwick's emotional openness and Zendaya's health.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "chris_hemsworth",
+      "name": "Chris Hemsworth",
+      "tier": 1,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-07",
+      "next_action": "2026-04-06",
+      "social_battery_cost": "Medium",
+      "origin_story": "Met through Warhammer. Friendship goes back to at least March 2020 (lockdown era). They paint miniatures together, play Warhammer 40K and Trench Crusade, and support each other through life stuff. Finn (Daniel's son) also plays with them.",
+      "notes": "**Interests:** Warhammer 40K (plays Tyranids, Orks, Death Korps of Krieg, Imperial Guard), Trench Crusade, miniature painting (Brain Trust pact to give each other feedback), gym, video games. Studying cybersecurity basics. Works shifts at an airport (Gatwick area). Also neurodivergent.\n\n**Sensitive:** Broke up with long-term girlfriend Gal in 2025. Tried to rekindle in Dec 2025 but it backfired. Still processing it. Cat Simba has died (had mouth cancer). Mum's health is fragile — was rushed to hospital Dec 2025. Feeling directionless career-wise. Workplace is toxic, considering severance.\n\nChris is going through a tough patch. Daniel's role is supportive friend and painting buddy. They last gamed in person on 6 Dec 2025. Also paint together over video call.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "jackie_chan",
+      "name": "Jackie Chan",
+      "tier": 2,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-07",
+      "next_action": "2026-04-07",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "ryan_reynolds",
+      "name": "Ryan Reynolds",
+      "tier": 2,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-02-19",
+      "next_action": "2026-03-19",
+      "social_battery_cost": "Low",
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "leonardo_dicaprio",
+      "name": "Leonardo DiCaprio",
+      "tier": 2,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-21",
+      "next_action": "2026-04-21",
+      "social_battery_cost": "Low",
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "tom_hanks",
+      "name": "Tom Hanks",
+      "tier": 2,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-16",
+      "next_action": "2026-04-16",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "brad_pitt",
+      "name": "Brad Pitt",
+      "tier": 2,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-15",
+      "next_action": "2026-04-15",
+      "social_battery_cost": "Low",
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "john_legend",
+      "name": "John Legend",
+      "tier": 2,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-13",
+      "next_action": "2026-04-13",
+      "social_battery_cost": "Low",
+      "origin_story": "Met at Blackfriars when I was a trader. His little one was born around 2018.",
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "matt_damon",
+      "name": "Matt Damon",
+      "tier": 2,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-03-06",
+      "next_action": "2026-06-04",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": "**Sensitive:** His mum passed away in July 2025 after a long illness.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "jennifer_aniston",
+      "name": "Jennifer Aniston",
+      "tier": 2,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-20",
+      "next_action": "2026-04-19",
+      "social_battery_cost": null,
+      "origin_story": "Jennifer was Daniel's EA/admin at StarBeat from around 2017. Priyanka Chopra also worked there. They stayed in touch after both left. Jennifer moved to Apex Foundation (ops manager, investment team) around 2021.",
+      "notes": "**Interests:** Theatre, Bollywood dancing, reading, mountains (fell in love with them after a French Alps trip in Jan 2026), AI films. Wants to do a Japanese temple mountain trail holiday. Building a \"kids free life\" soundtrack.\n\n**Sensitive:** Shoulder injury — can't ski, has been improving with physio. Pain nearly gone as of March 2026 but still limited mobility. Daughter Billie's university decision — got Imperial Architecture offer but may prefer Bristol. Studying for A-levels (Feb 2026 turned 18).\n\nJennifer and Daniel have a warm, chatty friendship — share career frustrations, parenting updates, and cultural recommendations. Jennifer is building a new chapter as her kids become independent.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "priyanka_chopra",
+      "name": "Priyanka Chopra",
+      "tier": 2,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-21",
+      "next_action": "2026-04-20",
+      "social_battery_cost": null,
+      "origin_story": "Former boss and long-standing friend — worked together at a fund management company. Priyanka runs NovaFunds, an investment management firm with ~200 clients, growing toward 1,000. She handles all client communication herself (email, WhatsApp, Google Meet) and is recruiting a part-time staff member (Dwayne) to help. Has been exploring AI/communication solutions for scaling.",
+      "notes": "**Family:** Three children: Drake (at Exeter University), Shawn (applying for Jaguar degree apprenticeship), Ariana (plays football). Family are introverted and enjoy quiet life.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "lucy_liu",
+      "name": "Lucy Liu",
+      "tier": 2,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-07",
+      "next_action": "2026-04-07",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "george_clooney",
+      "name": "George Clooney",
+      "tier": 3,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-02-22",
+      "next_action": "2026-03-22",
+      "social_battery_cost": "Medium",
+      "origin_story": "Recruiter contacted on LinkedIn.",
+      "notes": "Crypto dev jobs are a potential option here too at senior end.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "chiwetel_ejiofor",
+      "name": "Chiwetel Ejiofor",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-02-03",
+      "next_action": "2026-05-03",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "oscar_isaac",
+      "name": "Oscar Isaac",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-22",
+      "next_action": "2026-04-22",
+      "social_battery_cost": null,
+      "origin_story": "Used to be a broker — Beta Capital. Currently between jobs.",
+      "notes": "Went to Nomo on 22/01/2026. He's going to put me in contact with someone.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "reese_witherspoon",
+      "name": "Reese Witherspoon",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-16",
+      "next_action": "2026-04-16",
+      "social_battery_cost": null,
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "hugh_jackman",
+      "name": "Hugh Jackman",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-14",
+      "next_action": "2026-04-14",
+      "social_battery_cost": null,
+      "origin_story": "Was a contractor at StarBeat to do some consultancy at the end of 2025. Has a bad back and had injections.",
+      "notes": "**Sensitive:** His mum is not well.\n\n**Interests:** Cricket and football.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "keanu_reeves",
+      "name": "Keanu Reeves",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-13",
+      "next_action": "2026-04-13",
+      "social_battery_cost": "Low",
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "vin_diesel",
+      "name": "Vin Diesel",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-12",
+      "next_action": "2026-04-12",
+      "social_battery_cost": "Low",
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "scarlett_johansson",
+      "name": "Scarlett Johansson",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-01-12",
+      "next_action": "2026-04-12",
+      "social_battery_cost": "Low",
+      "origin_story": "LPA contact — met via calls.",
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "rami_malek",
+      "name": "Rami Malek",
+      "tier": 3,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-21",
+      "next_action": "2026-04-20",
+      "social_battery_cost": "Low",
+      "origin_story": null,
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "will_smith",
+      "name": "Will Smith",
+      "tier": 3,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-21",
+      "next_action": "2026-04-20",
+      "social_battery_cost": "Medium",
+      "origin_story": "Investment Counsellor at Stellar Capital (will.smith@stellarcapital.com). Manages Daniel and Taylor's pension and ISA accounts held at Pinnacle. Took over from previous IC Timothée in October 2025. Support team includes Viola (Client Operations Associate), Kylie, Clint, and Christian.",
+      "notes": "Professional relationship — keep interactions focused on pension/ISA management. Will is responsive, friendly, and proactive. Signs off with \"Cheers.\"\n\nDaniel's pension is at Griffin Trust (merged with Vortex Financial in Feb 2026), held at Pinnacle. Daniel also has an ISA at Pinnacle. Taylor has a separate ISA at Pinnacle. Daniel is interested in holding gold ETFs as a long-term investment.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "chris_rock",
+      "name": "Chris Rock",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-03-21",
+      "next_action": "2026-06-21",
+      "social_battery_cost": "Low",
+      "origin_story": "Recruiter contacted on LinkedIn.",
+      "notes": null,
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "jet_li",
+      "name": "Jet Li",
+      "tier": 3,
+      "frequency": "Monthly",
+      "frequency_days": 30,
+      "last_contact": "2026-03-07",
+      "next_action": "2026-04-07",
+      "social_battery_cost": "Medium",
+      "origin_story": "Hong Kong Chinese. Li (李) is a common Chinese surname. Introduced by Oscar. Building Remembr — a contact management system based on memories with contacts. Conceptually very similar to Kit.",
+      "notes": "**Family:** Eldest son (11) has AuDHD.\n\n**Projects:** Building Remembr — a contact management system based on memories. Very similar to Kit. Worth keeping an eye on; potential for idea exchange or collaboration.",
+      "whatsapp": null,
+      "active": 1
+    },
+    {
+      "id": "benedict_cumberbatch",
+      "name": "Benedict Cumberbatch",
+      "tier": 3,
+      "frequency": "Quarterly",
+      "frequency_days": 90,
+      "last_contact": "2026-03-08",
+      "next_action": "2026-04-08",
+      "social_battery_cost": null,
+      "origin_story": "Met at StarBeat — was Daniel's boss and the initial CEO of the StarBeat Irish entity. Now Head of something at PinnacleAsset. Based in Spain (Marbella). Speaks Dutch, previously worked in the US. Has a Mustang. Had a respiratory infection and thrombosis in late 2025; wife has severe allergies.",
+      "notes": "**Family:** Has one daughter and one son. Family based in Spain.\n\n**Job Search:** Key ally in Daniel's job search. On 2 Mar 2026 referred Daniel for a PinnacleAsset Product Specialist role — Daniel submitted CV on 8 Mar 2026. Benedict flagged he's keeping Daniel in mind even if this role doesn't land. Has offered to put a word in with HR.",
+      "whatsapp": null,
+      "active": 1
+    }
+  ],
+  "followUps": [
+    {
+      "id": "fu_priyanka_chopra_0",
+      "contact_id": "priyanka_chopra",
+      "text": "Wait for Priyanka to send the data for the NovaFunds extract tool",
+      "completed": 0,
+      "created_at": "2026-03-21T00:00:00.000Z"
+    },
+    {
+      "id": "fu_priyanka_chopra_1",
+      "contact_id": "priyanka_chopra",
+      "text": "Review NovaFunds project progress in ~1 week (around 2026-03-28)",
+      "completed": 0,
+      "created_at": "2026-03-21T00:00:00.000Z"
+    }
+  ],
+  "interactions": [
+    {
+      "id": "salma_hayek_2026-03-20_0",
+      "contact_id": "salma_hayek",
+      "notes": "Salma mentioned Chadwick's Saudi interview went well but sticking point is relocation. Discussed Chadwick's Nexus Labs project — looks like it's going through. Salma said Chadwick also wants to do a masters. Daniel set Chadwick up with a call with his CFO. Chadwick is keen to leave Instagram. Salma is pleased Chadwick is being proactive about his future.",
+      "date": "2026-03-20",
+      "created_at": "2026-03-20T00:00:00.000Z"
+    },
+    {
+      "id": "salma_hayek_2026-03-11_0",
+      "contact_id": "salma_hayek",
+      "notes": "Zendaya has an upcoming operation — seeing a consultant end of month, looking for a surgeon who specialises in young athletes. Salma says they're getting on with life. Daniel mentioned he's looking for a new job — got messed around on a payoff.",
+      "date": "2026-03-11",
+      "created_at": "2026-03-11T00:00:00.000Z"
+    },
+    {
+      "id": "salma_hayek_2026-02-19_0",
+      "contact_id": "salma_hayek",
+      "notes": "Caught up over several days. Discussed Chinese New Year, Salma did her back in showing a client something. Planning to travel to India with Denzel. Daniel mentioned Chadwick has a business idea he's helping with. Salma runs her entire business via WhatsApp with no advertising.",
+      "date": "2026-02-19",
+      "created_at": "2026-02-19T00:00:00.000Z"
+    },
+    {
+      "id": "salma_hayek_2026-02-07_0",
+      "contact_id": "salma_hayek",
+      "notes": "Laughed about Chadwick being bored in Jeddah. Daniel encouraged him to go into the desert. Salma asked about Chadwick's deal progress. Daniel mentioned playing with AIs.",
+      "date": "2026-02-07",
+      "created_at": "2026-02-07T00:00:00.000Z"
+    },
+    {
+      "id": "salma_hayek_2025-12-04_0",
+      "contact_id": "salma_hayek",
+      "notes": "Discussed Chadwick's emotional state — Salma worried he holds her at arm's length and won't be vulnerable. Daniel shared that Chadwick is happier now with the Saudi project. Discussed Chadwick's tendency to make work his identity (same pattern as rowing). Daniel did a 28-min 5K PB.",
+      "date": "2025-12-04",
+      "created_at": "2025-12-04T00:00:00.000Z"
+    },
+    {
+      "id": "salma_hayek_2025-10-14_0",
+      "contact_id": "salma_hayek",
+      "notes": "Chadwick's CEO made a comment about 'making their loss with Chadwick' at a work drinks — Liam told Chadwick. Salma worried Chadwick is shutting down and doesn't know his direction. Daniel booked a massage and met Zendaya for photography session.",
+      "date": "2025-10-14",
+      "created_at": "2025-10-14T00:00:00.000Z"
+    },
+    {
+      "id": "salma_hayek_2025-05-21_0",
+      "contact_id": "salma_hayek",
+      "notes": "Major event: Chadwick had to quit competitive rowing due to back injury. Daniel helped talk Chadwick through it — encouraged vulnerability. Chadwick opened up to Salma for first time. Coach was cold about his departure. Daniel suggested Chadwick take time off and possibly visit Samye Ling for a retreat.",
+      "date": "2025-05-21",
+      "created_at": "2025-05-21T00:00:00.000Z"
+    },
+    {
+      "id": "chris_hemsworth_2026-03-21_0",
+      "contact_id": "chris_hemsworth",
+      "notes": "Daniel reached out — mentioned job search and interviews. No reply yet from Chris.",
+      "date": "2026-03-21",
+      "created_at": "2026-03-21T00:00:00.000Z"
+    },
+    {
+      "id": "chris_hemsworth_2026-03-07_0",
+      "contact_id": "chris_hemsworth",
+      "notes": "Chris is struggling. Worked through illness, body wrecked. Emotional conversation with Gal didn't help. Only 60% recovered but at the gym. Simba (cat) may have mouth cancer — mum against surgery, hoping it's benign. Cybersecurity course barely started — procrastinating. Feeling like a terrible painter. Daniel encouraged him: 'we're always enough', change of scenery helps. Both in similar boats with wanting to leave toxic jobs.",
+      "date": "2026-03-07",
+      "created_at": "2026-03-07T00:00:00.000Z"
+    },
+    {
+      "id": "chris_hemsworth_2026-03-02_0",
+      "contact_id": "chris_hemsworth",
+      "notes": "Chris was sick, airport gone mad due to conflict. Daniel vented about no bonus at work — decided to leave.",
+      "date": "2026-03-02",
+      "created_at": "2026-03-02T00:00:00.000Z"
+    },
+    {
+      "id": "chris_hemsworth_2026-02-19_0",
+      "contact_id": "chris_hemsworth",
+      "notes": "Chris on annual leave, slept 10 hours. Slowly moving on from Gal, gym helping. Studying cybersecurity basics — most interesting thing learned: businesses are woefully unprepared for cyberattacks (M&S breach). Started building Land Raiders Daniel got him. Daniel mentioned building AIs and finding his future direction.",
+      "date": "2026-02-19",
+      "created_at": "2026-02-19T00:00:00.000Z"
+    },
+    {
+      "id": "chris_hemsworth_2026-01-31_0",
+      "contact_id": "chris_hemsworth",
+      "notes": "Painting session over video call. Daniel building AIs. Chris shared progress on models.",
+      "date": "2026-01-31",
+      "created_at": "2026-01-31T00:00:00.000Z"
+    },
+    {
+      "id": "chris_hemsworth_2026-01-13_0",
+      "contact_id": "chris_hemsworth",
+      "notes": "Trying to schedule next game — Chris's roster under review. Chris said 'miss you guys dude.' Daniel suggested March 21 but Chris couldn't confirm yet.",
+      "date": "2026-01-13",
+      "created_at": "2026-01-13T00:00:00.000Z"
+    },
+    {
+      "id": "chris_hemsworth_2025-12-12_0",
+      "contact_id": "chris_hemsworth",
+      "notes": "Chris's mum rushed to hospital, condition worsened but medicated. Tried to rekindle with Gal — backfired, but feeling relief it's over. Both discussed wanting to change careers — Daniel encouraged him to just try things. Daniel mentioned coding and AI training. Planning more meetups and gaming.",
+      "date": "2025-12-12",
+      "created_at": "2025-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "chris_hemsworth_2025-12-06_0",
+      "contact_id": "chris_hemsworth",
+      "notes": "Came over for lunch (chicken). Played Trench Crusade — Daniel Heretic Legion, Finn Black Grail. Chris brought Hotel Chocolat for Taylor. Great day, Chris left early but worried about being rude. Both agreed to meet up more in the new year.",
+      "date": "2025-12-06",
+      "created_at": "2025-12-06T00:00:00.000Z"
+    },
+    {
+      "id": "matt_damon_2026-03-06_0",
+      "contact_id": "matt_damon",
+      "notes": "Bumped into Matt at St John's Yard. He's now retired — was demoted at work to give someone else a go at his role, it all got too much, and he negotiated an exit package. His mum died in July 2025 after a long illness. On a brighter note, both his daughters are doing well and have got jobs.",
+      "date": "2026-03-06",
+      "created_at": "2026-03-06T00:00:00.000Z"
+    },
+    {
+      "id": "jennifer_aniston_2026-03-20_0",
+      "contact_id": "jennifer_aniston",
+      "notes": "Billie got her Imperial Architecture offer — but may prefer Bristol. Jennifer discussed Billie's A-level prep. Daniel recovering from COVID. Chatted about AI films and Jennifer's shoulder (nearly pain free, still limited mobility). Daniel mentioned job hunting.",
+      "date": "2026-03-20",
+      "created_at": "2026-03-20T00:00:00.000Z"
+    },
+    {
+      "id": "jennifer_aniston_2026-02-28_0",
+      "contact_id": "jennifer_aniston",
+      "notes": "Billie turned 18 (Feb 2026). Jennifer went to French Alps in January — fell in love with mountains, wants Japanese temple mountain trail holiday. Building a 'kids free life' soundtrack. Shoulder improving with physio. Daniel shared he's looking to move on from work.",
+      "date": "2026-02-28",
+      "created_at": "2026-02-28T00:00:00.000Z"
+    },
+    {
+      "id": "jennifer_aniston_2026-01-14_0",
+      "contact_id": "jennifer_aniston",
+      "notes": "Caught up after Christmas. Jennifer mentioned her Alps trip plans. Daniel vented about work situation. Discussed New Year resolutions and fresh starts.",
+      "date": "2026-01-14",
+      "created_at": "2026-01-14T00:00:00.000Z"
+    },
+    {
+      "id": "jennifer_aniston_2025-10-22_0",
+      "contact_id": "jennifer_aniston",
+      "notes": "Jennifer shared Billie's UCAS progress and university shortlist. Daniel encouraged her. Discussed theatre trips and autumn plans.",
+      "date": "2025-10-22",
+      "created_at": "2025-10-22T00:00:00.000Z"
+    },
+    {
+      "id": "jennifer_aniston_2021-08-17_0",
+      "contact_id": "jennifer_aniston",
+      "notes": "Jennifer started at Apex Foundation on the investment team. Harry began A-levels. Daniel and Jennifer discussed career moves and DeepMind interest. Stayed in regular touch through WhatsApp.",
+      "date": "2021-08-17",
+      "created_at": "2021-08-17T00:00:00.000Z"
+    },
+    {
+      "id": "priyanka_chopra_2026-03-21_0",
+      "contact_id": "priyanka_chopra",
+      "notes": "Discussed assisting Priyanka with NovaFunds. She needs a data retrieval tool to compare portfolio performance against prospects. Will send data needed to build an extract tool. Heading into year end so may be less responsive for a while — agreed to review in a week.",
+      "date": "2026-03-21",
+      "created_at": "2026-03-21T00:00:00.000Z"
+    },
+    {
+      "id": "priyanka_chopra_2026-03-20_0",
+      "contact_id": "priyanka_chopra",
+      "notes": "Had a call/contact attempt at 16:30 (scheduled Fri slot). Daniel had COVID the week prior and had been trying to find a slot to continue their conversation about Daniel's job search and Priyanka's NovaFunds data project.",
+      "date": "2026-03-20",
+      "created_at": "2026-03-20T00:00:00.000Z"
+    },
+    {
+      "id": "priyanka_chopra_2025-06-12_0",
+      "contact_id": "priyanka_chopra",
+      "notes": "Dinner at Nomo at 17:30. Priyanka shared her full NovaFunds comms setup in detail — Google Workspace, Gmail labels per client, WhatsApp for messaging, Google Meet for calls. Discussed AI-assisted communication solutions for scaling. Daniel advised on prompting ChatGPT with a persona.",
+      "date": "2025-06-12",
+      "created_at": "2025-06-12T00:00:00.000Z"
+    },
+    {
+      "id": "priyanka_chopra_2025-01-05_0",
+      "contact_id": "priyanka_chopra",
+      "notes": "Drake back at Exeter, Shawn applying for Jaguar degree apprenticeship, Ariana playing football. Priyanka had a good new year.",
+      "date": "2025-01-05",
+      "created_at": "2025-01-05T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2026-03-07_0",
+      "contact_id": "lucy_liu",
+      "notes": "Follow-up on CNY. Daniel's family had fun, mum was happy. Lucy's parents look well. Finn showing zero compliance with traditions — full rebel teenager mode.",
+      "date": "2026-03-07",
+      "created_at": "2026-03-07T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2026-02-02_0",
+      "contact_id": "lucy_liu",
+      "notes": "CNY plans. Lucy doing quiet reunion dinner — family recently passed away. Rihanna got learner's license, first drive at 10km/h. Daniel's family doing big eat at mum's. Discussed yee sang, tea ceremony traditions. Lucy shared video of Rihanna's ang pow tea ceremony.",
+      "date": "2026-02-02",
+      "created_at": "2026-02-02T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2026-01-01_0",
+      "contact_id": "lucy_liu",
+      "notes": "New Year catch-up. Both glad to see the back of 2025. Lucy had a rough year — bullying case at her office, she was a witness, all other witnesses left the firm. Came out stronger. Finn has a girlfriend. Resolutions: Lucy reclaiming boundaries and saying NO; Daniel not punching anyone too hard.",
+      "date": "2026-01-01",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2025-12-25_0",
+      "contact_id": "lucy_liu",
+      "notes": "Christmas greetings exchanged. Lucy asked to pass wishes to Daniel's family.",
+      "date": "2025-12-25",
+      "created_at": "2025-12-25T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2025-08-18_0",
+      "contact_id": "lucy_liu",
+      "notes": "Viggo and family visited Lucy in NZ. Lucy's mum and dad send warm wishes. Photos shared.",
+      "date": "2025-08-18",
+      "created_at": "2025-08-18T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2025-05-26_0",
+      "contact_id": "lucy_liu",
+      "notes": "Lucy asked about martial arts — Daniel mostly doing tai chi now. Jay (Lucy's husband) made redundant — graphic artist role replaced by AI after 27 years at same company. Rihanna (17 soon) looking at career choices. Daniel still planning escape from the City, looking at coaching/mentoring.",
+      "date": "2025-05-26",
+      "created_at": "2025-05-26T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2025-04-29_0",
+      "contact_id": "lucy_liu",
+      "notes": "Reconnected after long gap. Lucy in Petaling Jaya, about to fly home to NZ. Bruno now retired in Chiang Mai with partner Ed and 4 dogs. Daniel recovered from long COVID. Rihanna turning 17, Finn 15. Daniel's mum beat cancer, happily married, doing up a house. Lucy now a Legal Administrator for immigration at a law firm. Both turning 50 next year. Daniel looking to exit finance — considering ADHD coaching and writing.",
+      "date": "2025-04-29",
+      "created_at": "2025-04-29T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2021-08-17_0",
+      "contact_id": "lucy_liu",
+      "notes": "Quick catch-up during COVID. Finn heading to secondary school. Lucy's mum (79) fit after colon cancer. Daniel's mum going through chemo (round 4/8) for bowel cancer. Both families dealing with kids bombing Zoom calls. NZ about to face Delta outbreak.",
+      "date": "2021-08-17",
+      "created_at": "2021-08-17T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2019-11-13_0",
+      "contact_id": "lucy_liu",
+      "notes": "Childhood memories — growing up in Taman Megah. Lucy's brother Bruno came out in Vancouver, now in HK with partner Ed. Lucy married 16 years (husband Jay). Daniel shared meeting Taylor through World of Warcraft. Haven't seen each other since 1994. Selena still Lucy's best friend, has thyroid issues.",
+      "date": "2019-11-13",
+      "created_at": "2019-11-13T00:00:00.000Z"
+    },
+    {
+      "id": "lucy_liu_2019-10-28_0",
+      "contact_id": "lucy_liu",
+      "notes": "Reconnected after years apart. Discussed Finn's ADHD/autism diagnosis and Daniel getting assessed too. Lucy shared she was assessed for ADD (low spectrum autism, ADD without hyperactivity). Talked about Rihanna (Lucy's daughter) — empathic, psychically sensitive. Shared tips on lucid dreaming. Warm, deep catch-up.",
+      "date": "2019-10-28",
+      "created_at": "2019-10-28T00:00:00.000Z"
+    },
+    {
+      "id": "rami_malek_2026-03-21_0",
+      "contact_id": "rami_malek",
+      "notes": "Sent Eid Mubarak message for Eid. Occasion-based check-in.",
+      "date": "2026-03-21",
+      "created_at": "2026-03-21T00:00:00.000Z"
+    },
+    {
+      "id": "will_smith_2026-03-21_0",
+      "contact_id": "will_smith",
+      "notes": "Daniel replied to the Gold ETFs thread — confirmed he's not looking to trade, sees gold as a long-term hold given government money printing. Awaiting Will's response on whether gold ETFs can be held in the pension or ISA.",
+      "date": "2026-03-21",
+      "created_at": "2026-03-21T00:00:00.000Z"
+    },
+    {
+      "id": "will_smith_2026-02-25_0",
+      "contact_id": "will_smith",
+      "notes": "Will responded to Daniel's gold ETF enquiry — asked whether Daniel wants to trade or hold on a recurring basis. Advised there's no minimum threshold for work pension transfers and offered a call to discuss further.",
+      "date": "2026-02-25",
+      "created_at": "2026-02-25T00:00:00.000Z"
+    },
+    {
+      "id": "will_smith_2026-02-22_0",
+      "contact_id": "will_smith",
+      "notes": "Daniel emailed Will asking about holding gold ETFs in pension or ISA, and about timing/thresholds for transferring more from his work pension into Stellar Capital.",
+      "date": "2026-02-22",
+      "created_at": "2026-02-22T00:00:00.000Z"
+    },
+    {
+      "id": "will_smith_2026-02-17_0",
+      "contact_id": "will_smith",
+      "notes": "Taylor's ISA funds (£8,000) confirmed received by Viola and being invested. Will confirmed transfer tracking.",
+      "date": "2026-02-17",
+      "created_at": "2026-02-17T00:00:00.000Z"
+    },
+    {
+      "id": "will_smith_2026-02-10_0",
+      "contact_id": "will_smith",
+      "notes": "Will confirmed Daniel's £2,500 pension contribution received. Explained delay caused by Griffin Trust / Vortex Financial merger over the weekend. Offered to call Taylor to walk her through her investment process.",
+      "date": "2026-02-10",
+      "created_at": "2026-02-10T00:00:00.000Z"
+    },
+    {
+      "id": "will_smith_2026-01-12_0",
+      "contact_id": "will_smith",
+      "notes": "Will confirmed cash balance visible in Daniel's ISA, funds to be invested in 1-2 working days. Discussed pension contribution paperwork — Daniel still looking to contribute £2,500 for current year. Viola resent DocuSign documents.",
+      "date": "2026-01-12",
+      "created_at": "2026-01-12T00:00:00.000Z"
+    },
+    {
+      "id": "will_smith_2026-01-05_0",
+      "contact_id": "will_smith",
+      "notes": "Happy New Year exchange. Will confirmed he could see Viola's email about £5,000 ISA subscription. New documents resent to Daniel. Arranged a phone call at 12:30 PM UK to confirm details with Daniel and Taylor.",
+      "date": "2026-01-05",
+      "created_at": "2026-01-05T00:00:00.000Z"
+    },
+    {
+      "id": "will_smith_2025-10-13_0",
+      "contact_id": "will_smith",
+      "notes": "Will's introduction meeting with Daniel and Taylor. Sent Zoom invite as new Investment Counsellor replacing Timothée.",
+      "date": "2025-10-13",
+      "created_at": "2025-10-13T00:00:00.000Z"
+    },
+    {
+      "id": "chris_rock_2026-03-21_0",
+      "contact_id": "chris_rock",
+      "notes": "Missed three meetings in a row with no meaningful follow-through. Downgraded contact frequency from Monthly to Quarterly. Not a useful contact at this stage — not taking the job search seriously. Low priority going forward.",
+      "date": "2026-03-21",
+      "created_at": "2026-03-21T00:00:00.000Z"
+    },
+    {
+      "id": "jet_li_2026-03-07_0",
+      "contact_id": "jet_li",
+      "notes": "Met with Jet. Learned he is Hong Kong Chinese with the common surname Li (李). His eldest son (11) has AuDHD. He is building Remembr, a contact management system that manages contacts via memories — very similar to Kit. Interesting overlap worth exploring.",
+      "date": "2026-03-07",
+      "created_at": "2026-03-07T00:00:00.000Z"
+    },
+    {
+      "id": "benedict_cumberbatch_2026-03-08_0",
+      "contact_id": "benedict_cumberbatch",
+      "notes": "Daniel confirmed he submitted his CV for the PinnacleAsset product specialist role Benedict referred him for. Acknowledged being light on the product specialist side. Benedict said he'd keep him in mind regardless of outcome and would let HR know Daniel is under his protection.",
+      "date": "2026-03-08",
+      "created_at": "2026-03-08T00:00:00.000Z"
+    },
+    {
+      "id": "benedict_cumberbatch_2026-03-02_0",
+      "contact_id": "benedict_cumberbatch",
+      "notes": "Benedict proactively reached out about a product specialist role at PinnacleAsset — they have someone in mind but need to review externally. Daniel expressed interest, noting his background is more ops-heavy. Benedict felt Daniel's project experience was relevant. Daniel said steady project work would suit him far better than BAU.",
+      "date": "2026-03-02",
+      "created_at": "2026-03-02T00:00:00.000Z"
+    },
+    {
+      "id": "benedict_cumberbatch_2026-02-04_0",
+      "contact_id": "benedict_cumberbatch",
+      "notes": "Met at Daniel's office lobby around 6pm (Benedict was at Atlas Bank). Good catch-up — first in-person in a while. Both agreed it had been too long.",
+      "date": "2026-02-04",
+      "created_at": "2026-02-04T00:00:00.000Z"
+    },
+    {
+      "id": "benedict_cumberbatch_2025-10-03_0",
+      "contact_id": "benedict_cumberbatch",
+      "notes": "Daniel told Benedict he's thinking of going back on the market — frustrated with micromanagement, under-resourcing, and lack of interesting work. Benedict had been through a tough stretch (respiratory infection, thrombosis, wife's allergies). Benedict said he'd just hired someone but would keep Daniel in mind. Daniel's son doing GCSEs.",
+      "date": "2025-10-03",
+      "created_at": "2025-10-03T00:00:00.000Z"
+    }
+  ]
+}

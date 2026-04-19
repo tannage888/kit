@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const b = require\\('@whiskeysockets/baileys'\\); console.log\\(typeof b.makeInMemoryStore, Object.keys\\(b\\).filter\\(k => k.toLowerCase\\(\\).includes\\('store'\\)\\)\\)\")",
+      "Bash(node -e \"const b = require\\('@whiskeysockets/baileys'\\); console.log\\(Object.keys\\(b\\).slice\\(0,40\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:3141/api/sweep/run -H \"Content-Type: application/json\" -d '{\"contact_name\": \"Owen Rees\"}')",
+      "Bash(curl -s http://localhost:3141/api/store/stats)",
+      "Bash(curl -s http://localhost:3141/api/debug/store)",
+      "Bash(curl -s http://localhost:3141/api/routes)",
+      "Bash(curl -s http://localhost:3141/)",
+      "Bash(python -m json.tool)",
+      "Bash(python -c ' *)",
+      "Bash(node -e \"const b = require\\('c:/Users/seang/OneDrive/Documents/ClaudeWork/projects/kit/gateway/node_modules/@whiskeysockets/baileys'\\); console.log\\(Object.keys\\(b\\).slice\\(0,20\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:3141/api/sweep/run -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(curl -s http://localhost:3141/api/sweep/status)",
+      "Read(//c/Users/seang/OneDrive/Documents/ClaudeWork/projects/**)",
+      "Bash(mkdir -p old/expo-app)",
+      "Bash(mv src *)",
+      "Bash(mv project.yaml recipe-transcriber-eval-review.html recipe-transcriber.skill old/)",
+      "Bash(rm -f src/services/whatsapp.ts src/services/message-store.ts)",
+      "Bash(rm -rf auth_state)",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(git check-ignore *)"
+    ]
+  }
+}

@@ -1,0 +1,282 @@
+/**
+ * SweepScheduler unit tests
+ *
+ * All external dependencies are mocked — Supabase, HistoryFetcher,
+ * CapturePipeline, and WhatsAppConnection. We test the scheduling
+ * logic and per-contact sweep behaviour.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { SweepScheduler } from "./sweep-scheduler.js";
+import type { TrackedContact, ConversationThread } from "../types.js";
+
+// ── Mock config ───────────────────────────────────────────────────────────────
+
+vi.mock("../config.js", () => ({
+  config: {
+    SUPABASE_URL: "https://test.supabase.co",
+    SUPABASE_SERVICE_KEY: "test-key",
+    SWEEP_INTERVAL_DAYS: 3,
+  },
+}));
+
+// ── Mock Supabase ─────────────────────────────────────────────────────────────
+
+const mockSupabaseSingle = vi.fn();
+const mockSupabaseUpsert = vi.fn().mockResolvedValue({ error: null });
+
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          single: mockSupabaseSingle,
+        }),
+      }),
+      upsert: mockSupabaseUpsert,
+    }),
+  }),
+}));
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+function makeContact(overrides: Partial<TrackedContact> = {}): TrackedContact {
+  return {
+    id: "contact-1",
+    name: "Alice",
+    whatsapp: "+447700900001",
+    tier: 1,
+    wa_capture: "auto",
+    frequency: "Monthly",
+    frequency_days: 30,
+    last_contact: "2026-03-01",
+    ...overrides,
+  };
+}
+
+function makeThread(contact: TrackedContact, messageCount = 3): ConversationThread {
+  const now = Date.now();
+  const messages = Array.from({ length: messageCount }, (_, i) => ({
+    remoteJid: "447700900001@s.whatsapp.net",
+    fromMe: i % 2 === 0,
+    body: `Message ${i}`,
+    timestamp: now - (messageCount - i) * 60_000,
+    messageId: `msg-${i}`,
+  }));
+  return {
+    contact,
+    messages,
+    startedAt: messages[0].timestamp,
+    lastActivityAt: messages[messages.length - 1].timestamp,
+  };
+}
+
+// ── Build scheduler with mocked deps ─────────────────────────────────────────
+
+function makeScheduler(contacts: TrackedContact[], threads: ConversationThread[][]) {
+  const mockWa = {
+    getStatus: vi.fn().mockReturnValue("connected"),
+  };
+
+  const mockContacts = {
+    getAll: vi.fn().mockReturnValue(contacts),
+  };
+
+  let threadIndex = 0;
+  const mockFetcher = {
+    fetchSince: vi.fn().mockImplementation(async () => {
+      return threads[threadIndex++] ?? [];
+    }),
+  };
+
+  const mockCapture = {
+    processAndCommit: vi.fn().mockResolvedValue(undefined),
+  };
+
+  const scheduler = new SweepScheduler(
+    mockWa as any,
+    mockContacts as any,
+    mockCapture as any,
+    mockFetcher as any
+  );
+
+  return { scheduler, mockWa, mockContacts, mockFetcher, mockCapture };
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe("SweepScheduler", () => {
+  beforeEach(() => {
+    mockSupabaseSingle.mockResolvedValue({ data: null, error: null });
+    mockSupabaseUpsert.mockResolvedValue({ error: null });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("skips contacts with wa_capture=off", async () => {
+    const contact = makeContact({ wa_capture: "off" });
+    const { scheduler, mockFetcher } = makeScheduler([contact], []);
+
+    const result = await scheduler.runSweep();
+
+    expect(result?.contactsSkipped).toBe(1);
+    expect(result?.contactsSwept).toBe(0);
+    expect(mockFetcher.fetchSince).not.toHaveBeenCalled();
+  });
+
+  it("skips contacts with no WhatsApp number", async () => {
+    const contact = makeContact({ whatsapp: "" });
+    const { scheduler, mockFetcher } = makeScheduler([contact], []);
+
+    const result = await scheduler.runSweep();
+
+    expect(result?.contactsSkipped).toBe(1);
+    expect(mockFetcher.fetchSince).not.toHaveBeenCalled();
+  });
+
+  it("records zero threads when no new messages found", async () => {
+    const contact = makeContact();
+    const { scheduler, mockCapture } = makeScheduler([contact], [[]]); // empty thread list
+
+    const result = await scheduler.runSweep();
+
+    expect(result?.contactsSwept).toBe(1);
+    expect(result?.threadsProcessed).toBe(0);
+    expect(mockCapture.processAndCommit).not.toHaveBeenCalled();
+  });
+
+  it("processes threads and commits them", async () => {
+    const contact = makeContact();
+    const thread = makeThread(contact);
+    const { scheduler, mockCapture } = makeScheduler([contact], [[thread]]);
+
+    const result = await scheduler.runSweep();
+
+    expect(result?.contactsSwept).toBe(1);
+    expect(result?.threadsProcessed).toBe(1);
+    expect(mockCapture.processAndCommit).toHaveBeenCalledWith(thread);
+  });
+
+  it("processes multiple threads for a single contact", async () => {
+    const contact = makeContact();
+    const threads = [makeThread(contact), makeThread(contact)];
+    const { scheduler, mockCapture } = makeScheduler([contact], [threads]);
+
+    const result = await scheduler.runSweep();
+
+    expect(result?.threadsProcessed).toBe(2);
+    expect(mockCapture.processAndCommit).toHaveBeenCalledTimes(2);
+  });
+
+  it("saves watermark after successful sweep", async () => {
+    const contact = makeContact();
+    const thread = makeThread(contact);
+    const { scheduler } = makeScheduler([contact], [[thread]]);
+
+    await scheduler.runSweep();
+
+    expect(mockSupabaseUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ contact_id: "contact-1" }),
+      expect.any(Object)
+    );
+  });
+
+  it("aborts when WhatsApp is not connected", async () => {
+    const contact = makeContact();
+    const { scheduler, mockWa, mockFetcher } = makeScheduler([contact], [[]]);
+    mockWa.getStatus.mockReturnValue("connecting");
+
+    const result = await scheduler.runSweep();
+
+    expect(result?.contactsSwept).toBe(0);
+    expect(mockFetcher.fetchSince).not.toHaveBeenCalled();
+  });
+
+  it("returns null when a sweep is already running", async () => {
+    const contact = makeContact();
+    // Make fetchSince hang so the first sweep doesn't complete
+    const mockWa = { getStatus: vi.fn().mockReturnValue("connected") };
+    const mockContacts = { getAll: vi.fn().mockReturnValue([contact]) };
+    const mockFetcher = {
+      fetchSince: vi.fn().mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve([]), 10_000))
+      ),
+    };
+    const mockCapture = { processAndCommit: vi.fn() };
+
+    const scheduler = new SweepScheduler(
+      mockWa as any,
+      mockContacts as any,
+      mockCapture as any,
+      mockFetcher as any
+    );
+
+    // Kick off a sweep but don't await it yet
+    const first = scheduler.runSweep();
+    // Immediately try a second — should return null
+    const second = await scheduler.runSweep();
+    expect(second).toBeNull();
+
+    // Advance timers to let first complete
+    vi.runAllTimersAsync();
+    await first;
+  });
+
+  it("records capture errors without stopping the sweep", async () => {
+    const contact = makeContact();
+    const thread = makeThread(contact);
+    const { scheduler, mockCapture } = makeScheduler([contact], [[thread]]);
+    mockCapture.processAndCommit.mockRejectedValue(new Error("Claude API timeout"));
+
+    const result = await scheduler.runSweep();
+
+    expect(result?.errors).toBe(1);
+    expect(result?.details[0].error).toContain("Claude API timeout");
+    // Sweep still completed (not thrown)
+    expect(result?.contactsSwept).toBe(1);
+  });
+
+  it("filters to a single contact when contact_name is provided", async () => {
+    const alice = makeContact({ id: "1", name: "Alice" });
+    const bob = makeContact({ id: "2", name: "Bob", whatsapp: "+447700900002" });
+    const { scheduler, mockFetcher } = makeScheduler([alice, bob], [[], []]);
+
+    const result = await scheduler.runSweep("alice");
+
+    expect(result?.details).toHaveLength(1);
+    expect(result?.details[0].contactName).toBe("Alice");
+    expect(mockFetcher.fetchSince).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses default lookback when no prior sweep state exists", async () => {
+    const contact = makeContact();
+    const { scheduler, mockFetcher } = makeScheduler([contact], [[]]);
+    mockSupabaseSingle.mockResolvedValue({ data: null }); // no prior state
+
+    await scheduler.runSweep();
+
+    const [, , sinceMs] = mockFetcher.fetchSince.mock.calls[0];
+    // Should be approximately 6 days ago (SWEEP_INTERVAL_DAYS * 2)
+    const expectedLookback = Date.now() - 6 * 24 * 60 * 60 * 1000;
+    expect(sinceMs).toBeGreaterThan(expectedLookback - 5000);
+    expect(sinceMs).toBeLessThan(expectedLookback + 5000);
+  });
+
+  it("uses stored watermark when prior sweep state exists", async () => {
+    const storedTs = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    mockSupabaseSingle.mockResolvedValue({
+      data: { last_message_ts: storedTs, last_swept_at: new Date().toISOString() },
+    });
+
+    const contact = makeContact();
+    const { scheduler, mockFetcher } = makeScheduler([contact], [[]]);
+
+    await scheduler.runSweep();
+
+    const [, , sinceMs] = mockFetcher.fetchSince.mock.calls[0];
+    expect(sinceMs).toBe(storedTs);
+  });
+});

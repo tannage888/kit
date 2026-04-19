@@ -1,0 +1,39 @@
+{
+  "name": "kit-gateway",
+  "version": "1.0.0",
+  "description": "Kit gateway — REST client of a dedicated claude_whatsapp_integration daemon. Runs capture pipeline, markdown↔Supabase sync, and exposes tools used by Kit Claude Code slash commands.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --loader tsx src/index.ts",
+    "mcp": "tsx src/mcp/server.ts",
+    "build": "tsc",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "chokidar": "^4.0.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "gray-matter": "^4.0.3",
+    "pino": "^9.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
