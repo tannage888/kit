@@ -31,6 +31,8 @@ import {
   setEnergy,
   getEnergy,
   dailyCheckin,
+  kitPrepCard,
+  kitDraftContext,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -235,6 +237,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: "object", properties: {}, required: [] },
     },
     {
+      name: "kit_prep_card",
+      description:
+        "Returns a pre-flight brief for a contact — background, interests, sensitive topics, " +
+        "open follow-ups, recent interactions, and Open Brain context. " +
+        "Use this before reaching out or entering a conversation with someone.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_name: {
+            type: "string",
+            description: "Contact name (full or partial) or their ID",
+          },
+        },
+        required: ["contact_name"],
+      },
+    },
+    {
+      name: "kit_draft_context",
+      description:
+        "Returns context for drafting a message to a contact. " +
+        "Includes their background, interests, sensitive topics, last 3 interactions, " +
+        "open follow-ups, and time since last contact. " +
+        "Optionally pass your intent so Claude can tailor the draft.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_name: {
+            type: "string",
+            description: "Contact name (full or partial) or their ID",
+          },
+          intent: {
+            type: "string",
+            description: "What you want to say or ask (optional — Claude will infer from context if omitted)",
+          },
+        },
+        required: ["contact_name"],
+      },
+    },
+    {
       name: "kit_daily_checkin",
       description:
         "Run the daily relationship check-in. Reads today's energy level, loads all active " +
@@ -402,6 +443,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "kit_daily_checkin": {
         const msg = await dailyCheckin();
+        return text(msg);
+      }
+
+      case "kit_prep_card": {
+        const msg = await kitPrepCard(String(args?.contact_name ?? ""));
+        return text(msg);
+      }
+
+      case "kit_draft_context": {
+        const msg = await kitDraftContext(
+          String(args?.contact_name ?? ""),
+          args?.intent ? String(args.intent) : undefined
+        );
         return text(msg);
       }
 

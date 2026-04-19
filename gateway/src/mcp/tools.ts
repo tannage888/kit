@@ -15,6 +15,7 @@ import { fileURLToPath } from "url";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { ContextBinder, toCanonicalName, ThoughtType } from "../context-binding/index.js";
 import { buildCheckinReport, formatCheckinReport, type CheckinContact, type CheckinFollowUp } from "../services/checkin.js";
+import { buildPrepCard, buildDraftContext, type PrepContact, type PrepInteraction, type PrepFollowUp, type PrepBrainContext } from "../services/prep.js";
 
 const _toolsDir = path.dirname(fileURLToPath(import.meta.url));
 const PEOPLE_DIR = path.resolve(_toolsDir, "..", "..", "..", "People");
@@ -538,6 +539,92 @@ export async function createContact(input: CreateContactInput): Promise<string> 
   });
 
   return `Created contact "${input.name}" (${id}). Markdown written to People/${TIER_FOLDER[input.tier]}/${input.name}.md. DB row inserted. Open Brain observation captured.`;
+}
+
+// ── Tool: kit_prep_card ───────────────────────────────────────────────────────
+
+export async function kitPrepCard(contactNameOrId: string): Promise<string> {
+  const detail = await getContact(contactNameOrId);
+  if (!detail) return `Contact "${contactNameOrId}" not found.`;
+
+  const { contact: c, recent_interactions, open_follow_ups, open_brain_context } = detail;
+
+  const prepContact: PrepContact = {
+    id: c.id,
+    name: c.name,
+    tier: c.tier,
+    frequency: c.frequency,
+    last_contact: c.last_contact,
+    next_action: c.next_action,
+    social_battery_cost: c.social_battery_cost,
+    origin_story: c.origin_story,
+    special_interests: (c as any).special_interests ?? null,
+    sensitive_topics: (c as any).sensitive_topics ?? null,
+    preferred_channel: (c as any).preferred_channel ?? null,
+    notes: c.notes,
+  };
+
+  const interactions: PrepInteraction[] = recent_interactions.map((i) => ({
+    date: i.date,
+    channel: i.channel,
+    notes: i.notes,
+  }));
+
+  const followUps: PrepFollowUp[] = open_follow_ups.map((fu) => ({
+    text: fu.text,
+    completed: fu.completed,
+  }));
+
+  const brainCtx: PrepBrainContext[] = open_brain_context.map((t) => ({
+    content: t.content,
+    type: t.type,
+    date: t.date,
+  }));
+
+  return buildPrepCard(prepContact, interactions, followUps, brainCtx);
+}
+
+// ── Tool: kit_draft_context ───────────────────────────────────────────────────
+
+export async function kitDraftContext(contactNameOrId: string, intent?: string): Promise<string> {
+  const detail = await getContact(contactNameOrId);
+  if (!detail) return `Contact "${contactNameOrId}" not found.`;
+
+  const { contact: c, recent_interactions, open_follow_ups, open_brain_context } = detail;
+
+  const prepContact: PrepContact = {
+    id: c.id,
+    name: c.name,
+    tier: c.tier,
+    frequency: c.frequency,
+    last_contact: c.last_contact,
+    next_action: c.next_action,
+    social_battery_cost: c.social_battery_cost,
+    origin_story: c.origin_story,
+    special_interests: (c as any).special_interests ?? null,
+    sensitive_topics: (c as any).sensitive_topics ?? null,
+    preferred_channel: (c as any).preferred_channel ?? null,
+    notes: c.notes,
+  };
+
+  const interactions: PrepInteraction[] = recent_interactions.map((i) => ({
+    date: i.date,
+    channel: i.channel,
+    notes: i.notes,
+  }));
+
+  const followUps: PrepFollowUp[] = open_follow_ups.map((fu) => ({
+    text: fu.text,
+    completed: fu.completed,
+  }));
+
+  const brainCtx: PrepBrainContext[] = open_brain_context.map((t) => ({
+    content: t.content,
+    type: t.type,
+    date: t.date,
+  }));
+
+  return buildDraftContext(prepContact, interactions, followUps, brainCtx, intent);
 }
 
 // ── Tool: kit_daily_checkin ───────────────────────────────────────────────────
