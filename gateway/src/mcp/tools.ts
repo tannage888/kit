@@ -780,3 +780,79 @@ export async function completeFollowUp(
 
   return `Marked as done for ${contact.name}: "${data[0].text}"`;
 }
+
+// ── Tool: kit_pending_captures ────────────────────────────────────────────────
+
+export async function getPendingCaptures(): Promise<string> {
+  const port = process.env.PORT ?? "3141";
+  const url = `http://localhost:${port}/api/captures/pending`;
+
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (err: any) {
+    return `Could not reach the Kit gateway at ${url}. Is it running?\nError: ${err.message}`;
+  }
+
+  if (!response.ok) {
+    return `Failed to fetch pending captures (HTTP ${response.status}).`;
+  }
+
+  const reviews = await response.json() as Array<{
+    contactId: string;
+    result: { contactName: string; summary: string; topics: string; messageCount: number };
+  }>;
+
+  if (reviews.length === 0) {
+    return "No captures pending review.";
+  }
+
+  const lines = [`## Pending Captures (${reviews.length})`];
+  for (const r of reviews) {
+    lines.push(
+      `\n### ${r.result.contactName} (id: \`${r.contactId}\`)`,
+      `**Messages:** ${r.result.messageCount} | **Topics:** ${r.result.topics}`,
+      `**Summary:** ${r.result.summary}`
+    );
+  }
+  lines.push("\nUse `/kit-captures confirm <id>` or `/kit-captures dismiss <id>` to action them.");
+  return lines.join("\n");
+}
+
+// ── Tool: kit_confirm_capture ─────────────────────────────────────────────────
+
+export async function confirmCapture(contactId: string): Promise<string> {
+  const port = process.env.PORT ?? "3141";
+  const url = `http://localhost:${port}/api/captures/confirm/${encodeURIComponent(contactId)}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, { method: "POST" });
+  } catch (err: any) {
+    return `Could not reach the Kit gateway. Is it running?\nError: ${err.message}`;
+  }
+
+  if (response.status === 404) return `No pending capture found for contact id \`${contactId}\`.`;
+  if (!response.ok) return `Confirm failed (HTTP ${response.status}).`;
+
+  return `Capture confirmed and saved for contact \`${contactId}\`.`;
+}
+
+// ── Tool: kit_dismiss_capture ─────────────────────────────────────────────────
+
+export async function dismissCapture(contactId: string): Promise<string> {
+  const port = process.env.PORT ?? "3141";
+  const url = `http://localhost:${port}/api/captures/dismiss/${encodeURIComponent(contactId)}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, { method: "POST" });
+  } catch (err: any) {
+    return `Could not reach the Kit gateway. Is it running?\nError: ${err.message}`;
+  }
+
+  if (response.status === 404) return `No pending capture found for contact id \`${contactId}\`.`;
+  if (!response.ok) return `Dismiss failed (HTTP ${response.status}).`;
+
+  return `Capture dismissed for contact \`${contactId}\`.`;
+}

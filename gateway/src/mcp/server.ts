@@ -34,6 +34,9 @@ import {
   kitPrepCard,
   kitDraftContext,
   kitReconnectContext,
+  getPendingCaptures,
+  confirmCapture,
+  dismissCapture,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -303,6 +306,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         "Requires energy to be set first via kit_set_energy.",
       inputSchema: { type: "object", properties: {}, required: [] },
     },
+    {
+      name: "kit_pending_captures",
+      description:
+        "List WhatsApp conversations queued for review. Returns each pending capture with " +
+        "a summary, topics, and message count. Use kit_confirm_capture or kit_dismiss_capture " +
+        "to action them. Requires the Kit gateway to be running.",
+      inputSchema: { type: "object", properties: {}, required: [] },
+    },
+    {
+      name: "kit_confirm_capture",
+      description:
+        "Confirm a pending WhatsApp capture — writes the interaction to Kit and Open Brain. " +
+        "Pass the contact ID shown in kit_pending_captures.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_id: { type: "string", description: "Contact ID from kit_pending_captures" },
+        },
+        required: ["contact_id"],
+      },
+    },
+    {
+      name: "kit_dismiss_capture",
+      description:
+        "Dismiss a pending WhatsApp capture without saving anything.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_id: { type: "string", description: "Contact ID from kit_pending_captures" },
+        },
+        required: ["contact_id"],
+      },
+    },
   ],
 }));
 
@@ -480,6 +516,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           String(args?.contact_name ?? ""),
           args?.intent ? String(args.intent) : undefined
         );
+        return text(msg);
+      }
+
+      case "kit_pending_captures": {
+        const msg = await getPendingCaptures();
+        return text(msg);
+      }
+
+      case "kit_confirm_capture": {
+        const msg = await confirmCapture(String(args?.contact_id ?? ""));
+        return text(msg);
+      }
+
+      case "kit_dismiss_capture": {
+        const msg = await dismissCapture(String(args?.contact_id ?? ""));
         return text(msg);
       }
 

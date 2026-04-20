@@ -1,188 +1,192 @@
 # Kit — Personal Relationship Management
 
-Kit is a React Native / Expo app for managing contact relationships. It shows you who you're overdue to reach out to, surfaces context before you message them, and logs interactions to Open Brain.
+Kit is a conversational relationship management tool for neurodivergent users. All interaction happens through Claude Code slash commands and Claude Desktop — no app required.
+
+It surfaces who you should reach out to today, gives you context before a conversation, helps you draft messages, and logs interactions to Open Brain.
+
+## Architecture
+
+```
+Claude Code / Claude Desktop
+    │  slash commands + MCP tools
+    ▼
+Kit gateway (port 3141)  ── REST ──►  WhatsApp daemon (port 3142)
+  │                                          │
+  ├── Supabase (kit schema)                  └── Baileys ──► WhatsApp
+  ├── Open Brain (via ContextBinder)
+  └── People/*.md (file watcher + sync)
+```
 
 ## Prerequisites
 
-- Node.js 18+
-- [Expo CLI](https://docs.expo.dev/get-started/installation/): `npm install -g expo-cli`
-- [EAS CLI](https://docs.expo.dev/eas-update/getting-started/) (for APK builds): `npm install -g eas-cli`
-- Android device or emulator
+- Node.js 20+
+- `cd gateway && cp .env.example .env` and fill in credentials (Supabase, Open Brain, Anthropic)
+- Supabase project with the `kit` schema (run migrations in `gateway/supabase/migrations/`)
 
-## Setup
+## Starting Kit
 
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Configure environment variables
+**Terminal 1 — Gateway**
 
 ```bash
-cp .env.example .env
+cd kit/gateway
+npm run dev
 ```
 
-Edit `.env` and fill in your Supabase credentials:
+The gateway starts on `http://localhost:3141`. It loads your contacts from Supabase, starts the markdown↔Supabase sync service, and begins the sweep scheduler.
 
-```
-EXPO_PUBLIC_SUPABASE_URL=https://popxesemindihcbedegy.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=<your anon key from Supabase dashboard>
-```
-
-> Find your anon key at: Supabase Dashboard → Project Settings → API → `anon public`
-
-### 3. Seed the database
-
-The seed data is pre-generated at `src/data/seedData.json` from the 34 contacts in `People/`.
-
-To regenerate it after editing markdown files:
+**Terminal 2 — MCP server** (for Claude Desktop)
 
 ```bash
-npm run seed
+cd kit/gateway
+npm run mcp
 ```
 
-This requires `gray-matter` and `ts-node` in devDependencies (already listed). The seed data is automatically loaded into SQLite on first app launch — no manual step needed.
-
-## Running the app
-
-```bash
-# Start Expo dev server
-npm start
-
-# Or directly on Android
-npm run android
-```
-
-Press `a` in the Expo terminal to open on Android emulator, or scan the QR code with Expo Go.
-
-## Building an APK (Android)
-
-### Option A — Local build (no EAS account needed)
-
-```bash
-npx expo run:android --variant release
-```
-
-The APK will be at `android/app/build/outputs/apk/release/app-release.apk`.
-
-### Option B — EAS cloud build
-
-```bash
-# One-time setup
-eas login
-eas build:configure
-
-# Build APK
-eas build --platform android --profile preview
-```
-
-Add this profile to `eas.json` if it doesn't exist:
+Or add it to `claude_desktop_config.json` so Claude Desktop spawns it automatically:
 
 ```json
 {
-  "build": {
-    "preview": {
-      "android": {
-        "buildType": "apk"
+  "mcpServers": {
+    "kit": {
+      "command": "npx",
+      "args": ["tsx", "<path>/kit/gateway/src/mcp/server.ts"],
+      "env": {
+        "SUPABASE_URL": "...",
+        "SUPABASE_SERVICE_KEY": "...",
+        "OPEN_BRAIN_URL": "...",
+        "OPEN_BRAIN_SERVICE_KEY": "...",
+        "ANTHROPIC_API_KEY": "..."
       }
     }
   }
 }
 ```
 
-EAS will give you a download link when the build completes.
+## Using Kit
 
-## Commands
+Set your energy level first, then run the daily check-in:
 
-### App (`kit/`)
+```
+/kit-energy high          set today's social energy (high / medium / low)
+/kit-checkin              who to reach out to today, sorted by drift + tier
+/kit-prep Alice           pre-flight brief before a conversation
+/kit-draft Alice          context for drafting a message
+/kit-reconnect Bob        reconnect brief for a dormant contact
+/kit-captures             review pending WhatsApp capture queue
+```
 
-| Command | What it does |
-|---|---|
-| `npm start` | Start the Expo app (choose platform) |
-| `npm run android` | Start Expo on Android |
-| `npm run ios` | Start Expo on iOS |
-| `npm run seed` | Parse `People/*.md` files and upsert to Supabase |
-| `npm test` | Run Jest tests |
-| `npm run test:coverage` | Jest with coverage report |
+Log interactions and manage follow-ups:
 
-### Gateway (`kit/gateway/`)
+```
+/kit-update               log a conversation (prompts for contact + notes)
+/kit-followup             add or complete a follow-up item
+```
 
-| Command | What it does |
-|---|---|
-| `npm run dev` | Start gateway with hot-reload |
-| `npm start` | Start gateway (production) |
-| `npm run mcp` | Start the MCP server for Claude Desktop |
-| `npm run build` | TypeScript compile |
-| `npm run lint` | ESLint |
-| `npm test` | Run Vitest tests |
-| `npm run test:watch` | Vitest in watch mode |
-| `npm run test:coverage` | Vitest with coverage |
+## WhatsApp capture (optional)
 
-### MCP tools (Claude Desktop, requires `npm run mcp`)
+Kit can buffer live WhatsApp messages for tracked contacts and queue them for your review before anything is stored. This requires the `claude_whatsapp_integration` daemon running on port 3142.
+
+See [docs/whatsapp-daemon-setup.md](docs/whatsapp-daemon-setup.md) for full setup instructions.
+
+The gateway works without the daemon — sweep (`sweep_now`) and all manual tools still work.
+
+## Gateway commands
+
+```bash
+cd gateway
+npm run dev            # start with hot-reload
+npm start              # start (production)
+npm run mcp            # start MCP server for Claude Desktop
+npm test               # run Vitest tests (194 tests)
+npm run test:watch     # watch mode
+npm run build          # TypeScript compile
+npm run lint           # ESLint
+```
+
+## MCP tools reference
 
 | Tool | What it does |
 |---|---|
+| `kit_set_energy` | Set today's social energy level |
+| `kit_get_energy` | Check today's energy level |
+| `kit_daily_checkin` | Run the daily relationship check-in |
+| `kit_prep_card` | Pre-flight brief for a contact |
+| `kit_draft_context` | Context for drafting a message |
+| `kit_reconnect_context` | Reconnect brief for a dormant contact |
+| `kit_pending_captures` | List WhatsApp captures awaiting review |
+| `kit_confirm_capture` | Save a capture to Kit + Open Brain |
+| `kit_dismiss_capture` | Discard a capture |
 | `get_queue` | Overdue + due-this-week contacts |
 | `get_contact` | Full detail for a contact |
-| `search_contacts` | Search by name |
+| `search_contacts` | Search contacts by name |
 | `log_interaction` | Log a conversation |
 | `add_follow_up` | Add a follow-up item |
 | `complete_follow_up` | Mark a follow-up done |
+| `create_contact` | Create a new contact |
 | `sweep_now` | Trigger a WhatsApp history sweep |
 
 ## Project structure
 
 ```
-app/
-  _layout.tsx          Root navigation (Stack), DB init + seed on launch
-  index.tsx            Home screen: Today's One Thing + due this week
-  contact/[id].tsx     Contact detail: bio, follow-ups, interaction log, WhatsApp
-  log/[id].tsx         Log interaction: free text + date, saves to SQLite + Supabase
+gateway/
+  src/
+    index.ts                   Express server entry point (port 3141)
+    config.ts                  Environment variable schema
+    mcp/
+      server.ts                MCP server (stdio transport)
+      tools.ts                 MCP tool implementations
+    services/
+      contacts.ts              Contact registry (loads from Supabase)
+      energy.ts                Energy state service
+      checkin.ts               Daily check-in pure functions
+      prep.ts                  Prep card + draft context pure functions
+      reconnect.ts             Reconnect context pure functions
+      relationship-status.ts   Drift, safety, and occasion calculations
+      message-router.ts        WhatsApp message buffering + capture routing
+      capture.ts               Capture pipeline (summarise + review queue)
+      sweep-scheduler.ts       Scheduled WhatsApp history sweeps
+      history-fetcher.ts       REST client for WhatsApp daemon
+      sync.ts                  Markdown↔Supabase bidirectional sync
+    routes/api.ts              REST API routes
+    utils/markdown.ts          People/*.md parser
+    context-binding/           Open Brain integration (ContextBinder)
+    types.ts                   Shared TypeScript types
+  supabase/migrations/         SQL migrations for the kit schema
+  src/e2e.test.ts              End-to-end smoke tests
 
-src/
-  db/database.ts       SQLite schema, seed, all queries
-  lib/dateUtils.ts     Date helpers (overdue calc, frequency→days, formatting)
-  lib/supabase.ts      Supabase client + logToOpenBrain()
-  types/index.ts       TypeScript interfaces
-  data/seedData.json   Pre-parsed contacts from People/ markdown files
+.claude/commands/              Claude Code slash commands
+  kit-energy.md
+  kit-checkin.md
+  kit-prep.md
+  kit-draft.md
+  kit-reconnect.md
+  kit-captures.md
+  kit-update.md
+  kit-followup.md
 
-scripts/
-  seed.ts              Parses People/**/*.md → src/data/seedData.json
+People/                        Contact markdown files (gitignored)
+People.template/               Contact file schema/template
+docs/
+  kit_specification.md         Full v1.0 spec
+  implementation-plan.md       Phase-by-phase build plan
+  whatsapp-daemon-setup.md     WhatsApp daemon setup guide
+  manual-test-plan.md          Manual QA checklist
+
+old/                           v0 Expo app (kept for v2.0 reference)
 ```
 
-## How the seed works
+## People/*.md format
 
-`scripts/seed.ts` reads every `.md` file in `People/1 - Inner Circle/`, `People/2 - Active/`, and `People/3 - Business Contact/`. It parses:
+Contacts live as markdown files in `People/`. They're the source of truth — edits sync to Supabase automatically. See `People.template/` for the full schema.
 
-- **YAML frontmatter** → contact fields (name, frequency, last_contact, next_action, social_battery)
-- **`## How We Met` / `## Background` / `## Role & Context`** → `origin_story`
-- **`## Interests & Hooks`, `## Sensitive Topics`, `## Notes`, `## Family`** → `notes`
-- **`### YYYY-MM-DD — Type` blocks** → `interaction_log` table
-- **`**Follow-ups:**` lists** → `follow_ups` table
+Key frontmatter fields:
 
-Relationship tier is mapped: `1-Inner Circle → 1`, `2-Active → 2`, `3-Business Contact → 3`.
-
-On first app launch, `_layout.tsx` checks the `meta` table for a `seeded` flag. If absent, it inserts all contacts, follow-ups, and interactions, then sets the flag. Subsequent launches skip seeding.
-
-## Supabase / Open Brain integration
-
-When you log an interaction, Kit writes to the `memories` table in your Supabase project:
-
-```json
-{
-  "content": "Kit interaction — [Name] (YYYY-MM-DD): [your notes]",
-  "domain": "kit",
-  "type": "interaction"
-}
+```yaml
+name: Alice Smith
+tier: 1                      # 1 Inner Circle / 2 Active / 3 Business
+frequency: Monthly
+whatsapp: "+447700900001"
+whatsapp_capture: enabled    # enabled | disabled (default: disabled)
+wa_capture: on_demand        # on_demand | auto | off
+birthday: 1990-04-21
+preferred_channel: whatsapp
 ```
-
-If `EXPO_PUBLIC_SUPABASE_URL` is not configured or contains `your-project`, the write is silently skipped.
-
-## Phase 2 (not built yet)
-
-- Push notifications for overdue contacts
-- AI message scaffolding ("What Do I Say?")
-- Energy budget check-in
-- Occasion awareness (birthdays, anniversaries)
-- Settings screen

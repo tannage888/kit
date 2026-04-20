@@ -7,37 +7,45 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 ## Phase history
 
 - Phase 1 ✅ — Gateway REST-client refactor (84 tests)
-- Phase 2 ✅ — Markdown schema (88 tests)
+- Phase 2 ✅ — Markdown schema + whatsapp_capture field (88 tests)
 - Phase 3 ✅ — Energy state + /kit-energy (98 tests)
 - Phase 4 ✅ — Drift/safety/occasion pure functions (135 tests)
-- Phase 5 ✅ — Daily check-in + /kit-checkin (147 tests, 2026-04-19)
+- Phase 5 ✅ — Daily check-in + /kit-checkin (147 tests)
+- Phase 6 ✅ — Prep card + draft context + /kit-prep + /kit-draft (163 tests)
+- Phase 7 ✅ — Slash commands: kit-energy, kit-checkin, kit-prep, kit-draft, kit-update, kit-followup
+- Phase 8 ✅ — Reconnect context + /kit-reconnect (174 tests)
+- Phase 9 ✅ — WhatsApp capture wiring: message-router filter, MCP tools kit_pending_captures/confirm/dismiss, /kit-captures, daemon setup docs (179 tests)
+- Phase 10 ✅ — E2e smoke test + manual test plan (194 tests, 2026-04-19)
 
 ---
 
-## Current status: Phase 5 complete — Beginning Phase 6
+## Current status: ALL PHASES COMPLETE ✅
 
-### Phase 6 — /kit-prep, /kit-draft (FR-02, FR-03)
+**Total: 194 tests passing, 12 test files**
 
-**Goal:** Conversation prep card and message drafting context.
+### Deliverables shipped
 
-**Deliverables:**
+**Gateway services (pure functions):**
+- `services/relationship-status.ts` — drift, safety, occasions
+- `services/checkin.ts` — buildCheckinReport + formatCheckinReport
+- `services/prep.ts` — buildPrepCard + buildDraftContext
+- `services/reconnect.ts` — buildReconnectContext
+- `services/energy.ts` — EnergyService + isEnergyLevel
+- `services/message-router.ts` — whatsapp_capture + wa_capture filter chain
 
-1. MCP tool `kit_prep_card(contact_name)` in `tools.ts`
-   - Returns: contact record, last 5 Open Brain thoughts, open follow-ups,
-     2-3 suggested question themes (assembled by Claude from the data, not server-side)
-   - No server-side Anthropic call — return raw context, let Claude draft
+**MCP tools (gateway/src/mcp/):**
+- server.ts: kit_set_energy, kit_get_energy, kit_daily_checkin, kit_prep_card, kit_draft_context, kit_reconnect_context, kit_pending_captures, kit_confirm_capture, kit_dismiss_capture
 
-2. MCP tool `kit_draft_context(contact_name, intent?)` in `tools.ts`
-   - Returns: origin_story, special_interests, sensitive_topics,
-     last 3 INTERACTION thoughts, open NEXT_ACTIONs, tier, time-since-last-contact
-   - No server-side Anthropic call
+**Slash commands (.claude/commands/):**
+- kit-energy.md, kit-checkin.md, kit-prep.md, kit-draft.md, kit-update.md, kit-followup.md, kit-reconnect.md, kit-captures.md
 
-3. `.claude/commands/kit-prep.md` and `.claude/commands/kit-draft.md`
+**Database migrations (gateway/supabase/migrations/):**
+- 20260419_phase2_contact_fields.sql — special_interests, sensitive_topics, preferred_channel, birthday, whatsapp_capture
+- 20260419_phase3_energy_state.sql — kit.energy_state table
 
-4. Tests in `gateway/src/mcp/prep.test.ts` (pure shape tests, no real Supabase)
+**Documentation:**
+- docs/whatsapp-daemon-setup.md
+- docs/manual-test-plan.md
 
-**Note:** Both tools reuse `getContact()` heavily — kit_prep_card is essentially
-`getContact()` formatted for pre-conversation use. Will add a dedicated
-`kitPrepCard()` function that returns structured JSON for Claude to present.
-
-Don't emit `<promise>KIT_V1_COMPLETE</promise>` until all 10 phases are green.
+**E2e test:**
+- src/e2e.test.ts — 15 tests covering Phases 3–9 pure function layer

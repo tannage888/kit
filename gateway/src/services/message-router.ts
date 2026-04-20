@@ -42,6 +42,9 @@ export class MessageRouter {
     // Not a tracked contact — ignore silently
     if (!contact) return;
 
+    // Contact has not opted into WhatsApp capture — drop entirely
+    if (contact.whatsapp_capture === "disabled") return;
+
     // Capture is off for this contact — do not read or buffer
     // (Privacy control per spec §6.3)
     if (contact.wa_capture === "off") return;
