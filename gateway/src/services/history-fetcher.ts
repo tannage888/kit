@@ -48,8 +48,36 @@ export class HistoryFetcher {
       throw new Error(`WhatsApp daemon returned HTTP ${res.status} for JID ${jid}`);
     }
 
-    const body = (await res.json()) as { messages?: WhatsAppMessage[] };
-    const allMessages = body.messages ?? [];
+    // Daemon response shape: { messages: [{ id, timestamp(ISO), fromMe, body, ... }] }
+    // Map into the gateway's WhatsAppMessage shape (epoch-ms timestamp, messageId, remoteJid).
+    type RawMessage = {
+      id?: string;
+      messageId?: string;
+      timestamp: string | number;
+      fromMe: boolean;
+      body: string;
+      remoteJid?: string;
+    };
+    const body = (await res.json()) as { messages?: RawMessage[] };
+    const raw = body.messages ?? [];
+
+    // Dedup by messageId (daemon store occasionally returns duplicates)
+    const byId = new Map<string, WhatsAppMessage>();
+    for (const m of raw) {
+      const ts = typeof m.timestamp === "number" ? m.timestamp : Date.parse(m.timestamp);
+      if (!Number.isFinite(ts)) continue;
+      const id = m.messageId ?? m.id ?? "";
+      if (!byId.has(id)) {
+        byId.set(id, {
+          remoteJid: m.remoteJid ?? jid,
+          fromMe: m.fromMe,
+          body: m.body,
+          timestamp: ts,
+          messageId: id,
+        });
+      }
+    }
+    const allMessages = [...byId.values()];
 
     // Client-side watermark filter as a safety net
     const messages = allMessages.filter((m) => m.timestamp > sinceMs);
@@ -72,8 +100,13 @@ export class HistoryFetcher {
 
   /**
    * Group a chronologically-sorted message array into conversation threads.
-   * A new thread starts whenever there's a silence gap longer than gapMs.
-   * Threads with fewer than MIN_THREAD_MESSAGES messages are discarded.
+   *
+   * Split into blocks by silence gaps longer than gapMs. A block with fewer
+   * than MIN_THREAD_MESSAGES messages (an "orphan") is absorbed into the
+   * next block to avoid dropping outbound messages whose reply comes days
+   * later. A trailing orphan (no following block) is still emitted so the
+   * interaction is captured — otherwise single outbound messages would be
+   * lost until a reply landed within the gap window.
    */
   private groupIntoThreads(
     contact: TrackedContact,
@@ -81,26 +114,32 @@ export class HistoryFetcher {
   ): ConversationThread[] {
     if (messages.length === 0) return [];
 
-    const threads: ConversationThread[] = [];
-    let current: WhatsAppMessage[] = [messages[0]];
-
+    // 1. Split into gap-separated blocks
+    const blocks: WhatsAppMessage[][] = [[messages[0]]];
     for (let i = 1; i < messages.length; i++) {
-      const prev = messages[i - 1];
-      const msg = messages[i];
-      const gap = msg.timestamp - prev.timestamp;
-
+      const gap = messages[i].timestamp - messages[i - 1].timestamp;
       if (gap > this.gapMs) {
-        if (current.length >= MIN_THREAD_MESSAGES) {
-          threads.push(this.buildThread(contact, current));
-        }
-        current = [msg];
+        blocks.push([messages[i]]);
       } else {
-        current.push(msg);
+        blocks[blocks.length - 1].push(messages[i]);
       }
     }
 
-    if (current.length >= MIN_THREAD_MESSAGES) {
-      threads.push(this.buildThread(contact, current));
+    // 2. Absorb orphan blocks (<MIN_THREAD_MESSAGES) into the next block.
+    //    Any trailing orphan is still emitted as its own thread.
+    const threads: ConversationThread[] = [];
+    let pending: WhatsAppMessage[] = [];
+    for (const block of blocks) {
+      const combined = pending.length > 0 ? [...pending, ...block] : block;
+      pending = [];
+      if (combined.length >= MIN_THREAD_MESSAGES) {
+        threads.push(this.buildThread(contact, combined));
+      } else {
+        pending = combined;
+      }
+    }
+    if (pending.length > 0) {
+      threads.push(this.buildThread(contact, pending));
     }
 
     return threads;

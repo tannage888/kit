@@ -113,7 +113,7 @@ describe("HistoryFetcher", () => {
     expect(threads[0].startedAt).toBeLessThan(threads[1].startedAt);
   });
 
-  it("discards threads with only one message", async () => {
+  it("absorbs a preceding orphan block into the next thread", async () => {
     const msgs = [
       fakeMsg(NOW - 20 * HOUR, "Solo message in thread 1", false),
       fakeMsg(NOW - 2 * HOUR, "Message A", false),
@@ -121,6 +121,29 @@ describe("HistoryFetcher", () => {
     ];
     const fetcher = makeFetcher(msgs);
     const threads = await fetcher.fetchSince(JID, contact, NOW - 2 * DAY);
+
+    expect(threads).toHaveLength(1);
+    expect(threads[0].messages).toHaveLength(3);
+    expect(threads[0].messages[0].body).toBe("Solo message in thread 1");
+  });
+
+  it("emits a trailing orphan as its own single-message thread", async () => {
+    const msgs = [fakeMsg(NOW - 1 * HOUR, "Hey! Ping.", true)];
+    const fetcher = makeFetcher(msgs);
+    const threads = await fetcher.fetchSince(JID, contact, NOW - DAY);
+
+    expect(threads).toHaveLength(1);
+    expect(threads[0].messages).toHaveLength(1);
+    expect(threads[0].messages[0].body).toBe("Hey! Ping.");
+  });
+
+  it("merges two sequential orphans separated by a large gap into one thread", async () => {
+    const msgs = [
+      fakeMsg(NOW - 8 * DAY, "Hey, how's things?", true),
+      fakeMsg(NOW - 1 * HOUR, "Sorry for the late reply — all good!", false),
+    ];
+    const fetcher = makeFetcher(msgs);
+    const threads = await fetcher.fetchSince(JID, contact, NOW - 14 * DAY);
 
     expect(threads).toHaveLength(1);
     expect(threads[0].messages).toHaveLength(2);

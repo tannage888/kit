@@ -223,8 +223,14 @@ ${transcript}`,
       response.content[0].type === "text" ? response.content[0].text : "";
 
     let parsed: { topics: string; follow_ups: string; sentiment: string };
+    // Claude sometimes wraps JSON in ```json … ``` fences; strip them first.
+    const jsonText = text
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
     try {
-      parsed = JSON.parse(text);
+      parsed = JSON.parse(jsonText);
     } catch {
       parsed = {
         topics: text.substring(0, 500),
