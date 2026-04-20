@@ -37,6 +37,7 @@ import {
   getPendingCaptures,
   confirmCapture,
   dismissCapture,
+  setContactActive,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -339,6 +340,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["contact_id"],
       },
     },
+    {
+      name: "set_contact_active",
+      description:
+        "Mark a contact as active or inactive. Inactive contacts are hidden from " +
+        "check-ins, prep cards, sweeps, and follow-up prompts but their records and " +
+        "history are preserved. Use this to archive people you're no longer in touch " +
+        "with, or to bring one back into rotation.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_name: {
+            type: "string",
+            description: "Contact name or ID (partial name match is fine)",
+          },
+          active: {
+            type: "boolean",
+            description: "true to activate, false to archive",
+          },
+        },
+        required: ["contact_name", "active"],
+      },
+    },
   ],
 }));
 
@@ -531,6 +554,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "kit_dismiss_capture": {
         const msg = await dismissCapture(String(args?.contact_id ?? ""));
+        return text(msg);
+      }
+
+      case "set_contact_active": {
+        const msg = await setContactActive(
+          String(args?.contact_name ?? ""),
+          Boolean(args?.active),
+        );
         return text(msg);
       }
 

@@ -781,6 +781,40 @@ export async function completeFollowUp(
   return `Marked as done for ${contact.name}: "${data[0].text}"`;
 }
 
+// ── Tool: set_contact_active ──────────────────────────────────────────────────
+
+export async function setContactActive(
+  contactNameOrId: string,
+  active: boolean
+): Promise<string> {
+  // Can't use resolveContact() — it filters active=true, which excludes
+  // already-inactive contacts we'd want to re-activate.
+  const db = kitClient();
+  const { data } = await db
+    .from("contacts")
+    .select("id, name, active")
+    .or(`id.eq.${contactNameOrId},name.ilike.%${contactNameOrId}%`)
+    .limit(1);
+
+  const contact = data?.[0];
+  if (!contact) return `Contact "${contactNameOrId}" not found.`;
+
+  if (contact.active === active) {
+    return `${contact.name} is already ${active ? "active" : "inactive"}.`;
+  }
+
+  const { error } = await db
+    .from("contacts")
+    .update({ active })
+    .eq("id", contact.id);
+
+  if (error) throw new Error(`contacts update failed: ${error.message}`);
+
+  return active
+    ? `${contact.name} is now active again.`
+    : `${contact.name} marked inactive — will be skipped by check-ins, sweeps, and follow-up prompts.`;
+}
+
 // ── Tool: kit_pending_captures ────────────────────────────────────────────────
 
 export async function getPendingCaptures(): Promise<string> {
