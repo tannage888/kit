@@ -121,7 +121,7 @@ async function resolveContact(nameOrId: string): Promise<Contact | null> {
   return byName?.[0] ?? null;
 }
 
-// ── Tool: get_queue ───────────────────────────────────────────────────────────
+// ── Tool: get-queue ───────────────────────────────────────────────────────────
 
 export interface QueueResult {
   overdue: Array<Contact & { days_overdue: number }>;
@@ -162,7 +162,7 @@ export async function getQueue(): Promise<QueueResult> {
   return { overdue, due_this_week };
 }
 
-// ── Tool: get_contact ─────────────────────────────────────────────────────────
+// ── Tool: get-contact ─────────────────────────────────────────────────────────
 
 export interface ContactDetail {
   contact: Contact;
@@ -214,7 +214,7 @@ export async function getContact(nameOrId: string): Promise<ContactDetail | null
   };
 }
 
-// ── Tool: search_contacts ─────────────────────────────────────────────────────
+// ── Tool: search-contacts ─────────────────────────────────────────────────────
 
 export async function searchContacts(query: string): Promise<Contact[]> {
   const { data } = await kitClient()
@@ -226,7 +226,7 @@ export async function searchContacts(query: string): Promise<Contact[]> {
   return (data ?? []) as Contact[];
 }
 
-// ── Tool: log_interaction ─────────────────────────────────────────────────────
+// ── Tool: log-interaction ─────────────────────────────────────────────────────
 
 export interface LogInteractionInput {
   contact_name: string;
@@ -318,7 +318,7 @@ export async function logInteraction(input: LogInteractionInput): Promise<string
   return `Logged interaction with ${contact.name} on ${date}.${followUpSummary} Next action scheduled for ${nextAction}.`;
 }
 
-// ── Tool: add_follow_up ───────────────────────────────────────────────────────
+// ── Tool: add-follow-up ───────────────────────────────────────────────────────
 
 export async function addFollowUp(contactNameOrId: string, text: string): Promise<string> {
   const contact = await resolveContact(contactNameOrId);
@@ -346,7 +346,7 @@ export async function addFollowUp(contactNameOrId: string, text: string): Promis
   return `Follow-up added for ${contact.name}: "${text}"`;
 }
 
-// ── Tool: sweep_now ───────────────────────────────────────────────────────────
+// ── Tool: sweep-now ───────────────────────────────────────────────────────────
 
 export interface SweepNowResult {
   contactsSwept: number;
@@ -419,7 +419,7 @@ export async function sweepNow(contactName?: string): Promise<string> {
   return lines.join("\n");
 }
 
-// ── Tool: create_contact ──────────────────────────────────────────────────────
+// ── Tool: create-contact ──────────────────────────────────────────────────────
 
 const TIER_FOLDER: Record<number, string> = {
   1: "1 - Inner Circle",
@@ -542,7 +542,7 @@ export async function createContact(input: CreateContactInput): Promise<string> 
   return `Created contact "${input.name}" (${id}). Markdown written to People/${TIER_FOLDER[input.tier]}/${input.name}.md. DB row inserted. Open Brain observation captured.`;
 }
 
-// ── Tool: kit_prep_card ───────────────────────────────────────────────────────
+// ── Tool: kit-prep-card ───────────────────────────────────────────────────────
 
 export async function kitPrepCard(contactNameOrId: string): Promise<string> {
   const detail = await getContact(contactNameOrId);
@@ -585,7 +585,7 @@ export async function kitPrepCard(contactNameOrId: string): Promise<string> {
   return buildPrepCard(prepContact, interactions, followUps, brainCtx);
 }
 
-// ── Tool: kit_draft_context ───────────────────────────────────────────────────
+// ── Tool: kit-draft-context ───────────────────────────────────────────────────
 
 export async function kitDraftContext(contactNameOrId: string, intent?: string): Promise<string> {
   const detail = await getContact(contactNameOrId);
@@ -628,7 +628,7 @@ export async function kitDraftContext(contactNameOrId: string, intent?: string):
   return buildDraftContext(prepContact, interactions, followUps, brainCtx, intent);
 }
 
-// ── Tool: kit_reconnect_context ───────────────────────────────────────────────
+// ── Tool: kit-reconnect-context ───────────────────────────────────────────────
 
 export async function kitReconnectContext(contactNameOrId: string): Promise<string> {
   const detail = await getContact(contactNameOrId);
@@ -657,7 +657,7 @@ export async function kitReconnectContext(contactNameOrId: string): Promise<stri
   return buildReconnectContext(rc, interactions);
 }
 
-// ── Tool: kit_daily_checkin ───────────────────────────────────────────────────
+// ── Tool: kit-daily-checkin ───────────────────────────────────────────────────
 
 export async function dailyCheckin(): Promise<string> {
   const db = kitClient();
@@ -747,7 +747,7 @@ export async function getEnergy(): Promise<string> {
   return `Today's energy level: **${data.level}** (${today}).`;
 }
 
-// ── Tool: complete_follow_up ──────────────────────────────────────────────────
+// ── Tool: complete-follow-up ──────────────────────────────────────────────────
 
 export async function completeFollowUp(
   contactNameOrId: string,
@@ -781,7 +781,7 @@ export async function completeFollowUp(
   return `Marked as done for ${contact.name}: "${data[0].text}"`;
 }
 
-// ── Tool: set_contact_active ──────────────────────────────────────────────────
+// ── Tool: set-contact-active ──────────────────────────────────────────────────
 
 export async function setContactActive(
   contactNameOrId: string,
@@ -815,7 +815,7 @@ export async function setContactActive(
     : `${contact.name} marked inactive — will be skipped by check-ins, sweeps, and follow-up prompts.`;
 }
 
-// ── Tool: kit_pending_captures ────────────────────────────────────────────────
+// ── Tool: kit-pending-captures ────────────────────────────────────────────────
 
 export async function getPendingCaptures(): Promise<string> {
   const port = process.env.PORT ?? "3141";
@@ -853,7 +853,7 @@ export async function getPendingCaptures(): Promise<string> {
   return lines.join("\n");
 }
 
-// ── Tool: kit_confirm_capture ─────────────────────────────────────────────────
+// ── Tool: kit-confirm-capture ─────────────────────────────────────────────────
 
 export async function confirmCapture(contactId: string): Promise<string> {
   const port = process.env.PORT ?? "3141";
@@ -872,7 +872,7 @@ export async function confirmCapture(contactId: string): Promise<string> {
   return `Capture confirmed and saved for contact \`${contactId}\`.`;
 }
 
-// ── Tool: kit_dismiss_capture ─────────────────────────────────────────────────
+// ── Tool: kit-dismiss-capture ─────────────────────────────────────────────────
 
 export async function dismissCapture(contactId: string): Promise<string> {
   const port = process.env.PORT ?? "3141";

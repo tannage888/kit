@@ -14,7 +14,7 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 - Phase 6 ✅ — Prep card + draft context + /kit-prep + /kit-draft (163 tests)
 - Phase 7 ✅ — Slash commands: kit-energy, kit-checkin, kit-prep, kit-draft, kit-update, kit-followup
 - Phase 8 ✅ — Reconnect context + /kit-reconnect (174 tests)
-- Phase 9 ✅ — WhatsApp capture wiring: message-router filter, MCP tools kit_pending_captures/confirm/dismiss, /kit-captures, daemon setup docs (179 tests)
+- Phase 9 ✅ — WhatsApp capture wiring: message-router filter, MCP tools kit-pending-captures/confirm/dismiss, /kit-captures, daemon setup docs (179 tests)
 - Phase 10 ✅ — E2e smoke test + manual test plan (194 tests, 2026-04-19)
 
 ---
@@ -34,7 +34,7 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 - `services/message-router.ts` — whatsapp_capture + wa_capture filter chain
 
 **MCP tools (gateway/src/mcp/):**
-- server.ts: kit_set_energy, kit_get_energy, kit_daily_checkin, kit_prep_card, kit_draft_context, kit_reconnect_context, kit_pending_captures, kit_confirm_capture, kit_dismiss_capture
+- server.ts: kit-set-energy, kit-get-energy, kit-daily-checkin, kit-prep-card, kit-draft-context, kit-reconnect-context, kit-pending-captures, kit-confirm-capture, kit-dismiss-capture, set-contact-active
 
 **Slash commands (.claude/commands/):**
 - kit-energy.md, kit-checkin.md, kit-prep.md, kit-draft.md, kit-update.md, kit-followup.md, kit-reconnect.md, kit-captures.md

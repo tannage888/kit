@@ -16,7 +16,7 @@ Pre-release smoke test checklist. Run against a live environment with the Kit ga
 - [ ] `/kit-energy medium` → "Energy set to **medium** for today"
 - [ ] `/kit-energy low` → "Energy set to **low** for today"
 - [ ] `/kit-energy invalid` → error message, not a crash
-- [ ] `kit_get_energy` (via MCP) → returns today's level
+- [ ] `kit-get-energy` (via MCP) → returns today's level
 
 ---
 
@@ -58,7 +58,7 @@ Pre-release smoke test checklist. Run against a live environment with the Kit ga
 
 ---
 
-## 6. Log interaction (`log_interaction` MCP tool)
+## 6. Log interaction (`log-interaction` MCP tool)
 
 - [ ] Log a whatsapp interaction for a known contact → "Logged successfully"
 - [ ] `last_contact` field updated in Supabase + markdown file
@@ -68,7 +68,7 @@ Pre-release smoke test checklist. Run against a live environment with the Kit ga
 
 ---
 
-## 7. Create contact (`create_contact` MCP tool)
+## 7. Create contact (`create-contact` MCP tool)
 
 - [ ] Creates `People/<tier>/<Name>.md` with correct frontmatter
 - [ ] Row inserted in `kit.contacts`
@@ -88,11 +88,11 @@ Requires Kit gateway and WhatsApp daemon running.
 
 ---
 
-## 9. Sweep (`sweep_now` MCP tool)
+## 9. Sweep (`sweep-now` MCP tool)
 
-- [ ] `sweep_now` with gateway running → returns sweep summary
-- [ ] `sweep_now` with contact_name → sweeps only that contact
-- [ ] `sweep_now` with gateway not running → friendly error (not a crash)
+- [ ] `sweep-now` with gateway running → returns sweep summary
+- [ ] `sweep-now` with contact_name → sweeps only that contact
+- [ ] `sweep-now` with gateway not running → friendly error (not a crash)
 - [ ] After sweep: `last_contact` updated for contacts with new messages
 
 ---

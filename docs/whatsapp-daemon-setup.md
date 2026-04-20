@@ -62,7 +62,7 @@ In Claude Desktop or Claude Code:
 /kit-captures dismiss <id> — discard
 ```
 
-Or via MCP tools: `kit_pending_captures`, `kit_confirm_capture`, `kit_dismiss_capture`.
+Or via MCP tools: `kit-pending-captures`, `kit-confirm-capture`, `kit-dismiss-capture`.
 
 ## Enabling capture for a contact
 

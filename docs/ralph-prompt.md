@@ -32,7 +32,7 @@ You are running inside the ralph-loop plugin. The same prompt is fed back to you
 | 2 | Markdown schema + parser updates | New fields round-trip MD ↔ Supabase, legacy MD tolerated |
 | 3 | Energy state + `/kit-energy` | `kit.energy_state` table, MCP tool, slash command, tests |
 | 4 | Drift + safety + occasion logic | Pure functions in `relationship-status.ts` with table-driven tests |
-| 5 | `/kit-checkin` | `kit_daily_checkin` returns correct slice per energy level |
+| 5 | `/kit-checkin` | `kit-daily-checkin` returns correct slice per energy level |
 | 6 | `/kit-prep`, `/kit-draft` | Context-return tools (no server-side drafting) |
 | 7 | `/kit-update`, `/kit-followup` | Interaction logging + follow-up CRUD, 4 side effects verified |
 | 8 | `/kit-reconnect` | Dormant-contact context assembly + gap formatting |

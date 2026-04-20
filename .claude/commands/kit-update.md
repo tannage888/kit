@@ -8,13 +8,13 @@ Usage: `/kit-update <name>`
 
 $ARGUMENTS
 
-Call `kit_prep_card` first to show who the contact is (one-liner summary), then ask:
+Call `kit-prep-card` first to show who the contact is (one-liner summary), then ask:
 1. "What did you talk about? (brief notes)"
 2. "Channel? (whatsapp/call/in-person/email — default: whatsapp)"
 3. "Any follow-ups to track?"
 4. "Date? (default: today)"
 
-Then call `log_interaction` with the collected details.
+Then call `log-interaction` with the collected details.
 
 After logging, confirm: "✅ Logged for [name]. Next action scheduled for [date]."
 

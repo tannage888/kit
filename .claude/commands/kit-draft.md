@@ -11,7 +11,7 @@ $ARGUMENTS
 Parse $ARGUMENTS: the first word/phrase before a comma or dash is the contact name,
 anything after is the intent. If no intent given, proceed with just the contact name.
 
-Call `kit_draft_context` with:
+Call `kit-draft-context` with:
 - contact_name: the contact name
 - intent: the intent (if provided)
 

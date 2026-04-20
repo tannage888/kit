@@ -8,7 +8,7 @@ Usage: `/kit-prep <name>`
 
 $ARGUMENTS
 
-Call `kit_prep_card` with contact_name: "$ARGUMENTS" and present the results.
+Call `kit-prep-card` with contact_name: "$ARGUMENTS" and present the results.
 
 After showing the prep card, offer to:
 - Draft a message with `/kit-draft <name>` if they want to reach out

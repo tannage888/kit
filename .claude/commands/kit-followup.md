@@ -12,8 +12,8 @@ Usage:
 $ARGUMENTS
 
 Parse the arguments:
-- If just a name: call `get_contact` to show open follow-ups for that contact
-- If "add": call `add_follow_up` with contact_name and text
-- If "done": call `complete_follow_up` with contact_name and follow_up_text
+- If just a name: call `get-contact` to show open follow-ups for that contact
+- If "add": call `add-follow-up` with contact_name and text
+- If "done": call `complete-follow-up` with contact_name and follow_up_text
 
 Confirm each action clearly.

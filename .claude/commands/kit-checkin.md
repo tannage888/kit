@@ -4,7 +4,7 @@ description: Daily relationship check-in — see who to reach out to today
 
 Run your daily relationship check-in.
 
-Call the `kit_daily_checkin` MCP tool and present the results.
+Call the `kit-daily-checkin` MCP tool and present the results.
 
 After showing the check-in results:
 - If there are contacts with black drift, offer to run `/kit-reconnect <name>` for each

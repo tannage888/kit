@@ -87,7 +87,7 @@ Kit can buffer live WhatsApp messages for tracked contacts and queue them for yo
 
 See [docs/whatsapp-daemon-setup.md](docs/whatsapp-daemon-setup.md) for full setup instructions.
 
-The gateway works without the daemon — sweep (`sweep_now`) and all manual tools still work.
+The gateway works without the daemon — sweep (`sweep-now`) and all manual tools still work.
 
 ## Gateway commands
 
@@ -106,23 +106,24 @@ npm run lint           # ESLint
 
 | Tool | What it does |
 |---|---|
-| `kit_set_energy` | Set today's social energy level |
-| `kit_get_energy` | Check today's energy level |
-| `kit_daily_checkin` | Run the daily relationship check-in |
-| `kit_prep_card` | Pre-flight brief for a contact |
-| `kit_draft_context` | Context for drafting a message |
-| `kit_reconnect_context` | Reconnect brief for a dormant contact |
-| `kit_pending_captures` | List WhatsApp captures awaiting review |
-| `kit_confirm_capture` | Save a capture to Kit + Open Brain |
-| `kit_dismiss_capture` | Discard a capture |
-| `get_queue` | Overdue + due-this-week contacts |
-| `get_contact` | Full detail for a contact |
-| `search_contacts` | Search contacts by name |
-| `log_interaction` | Log a conversation |
-| `add_follow_up` | Add a follow-up item |
-| `complete_follow_up` | Mark a follow-up done |
-| `create_contact` | Create a new contact |
-| `sweep_now` | Trigger a WhatsApp history sweep |
+| `kit-set-energy` | Set today's social energy level |
+| `kit-get-energy` | Check today's energy level |
+| `kit-daily-checkin` | Run the daily relationship check-in |
+| `kit-prep-card` | Pre-flight brief for a contact |
+| `kit-draft-context` | Context for drafting a message |
+| `kit-reconnect-context` | Reconnect brief for a dormant contact |
+| `kit-pending-captures` | List WhatsApp captures awaiting review |
+| `kit-confirm-capture` | Save a capture to Kit + Open Brain |
+| `kit-dismiss-capture` | Discard a capture |
+| `get-queue` | Overdue + due-this-week contacts |
+| `get-contact` | Full detail for a contact |
+| `search-contacts` | Search contacts by name |
+| `log-interaction` | Log a conversation |
+| `add-follow-up` | Add a follow-up item |
+| `complete-follow-up` | Mark a follow-up done |
+| `create-contact` | Create a new contact |
+| `sweep-now` | Trigger a WhatsApp history sweep |
+| `set-contact-active` | Archive or re-activate a contact |
 
 ## Project structure
 

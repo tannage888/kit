@@ -52,14 +52,14 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
-      name: "get_queue",
+      name: "get-queue",
       description:
         "Returns contacts that are overdue for a catch-up and those due this week. " +
         "Use this to answer 'who should I reach out to?' or 'what's my contact queue?'",
       inputSchema: { type: "object", properties: {}, required: [] },
     },
     {
-      name: "get_contact",
+      name: "get-contact",
       description:
         "Returns full details for a single contact including their background, " +
         "recent interactions, open follow-ups, and days overdue. " +
@@ -76,7 +76,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "search_contacts",
+      name: "search-contacts",
       description: "Search contacts by name fragment. Returns all matching contacts.",
       inputSchema: {
         type: "object",
@@ -87,7 +87,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "log_interaction",
+      name: "log-interaction",
       description:
         "Log a conversation or interaction with a contact. " +
         "Updates last_contact, schedules the next action, and writes to Open Brain. " +
@@ -122,7 +122,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "add_follow_up",
+      name: "add-follow-up",
       description: "Add a follow-up item to a contact's list.",
       inputSchema: {
         type: "object",
@@ -140,7 +140,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "complete_follow_up",
+      name: "complete-follow-up",
       description: "Mark a follow-up item as done for a contact.",
       inputSchema: {
         type: "object",
@@ -158,7 +158,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "create_contact",
+      name: "create-contact",
       description:
         "Create a new contact in Kit: writes the People/*.md file, inserts the DB row, " +
         "and captures an Open Brain observation — all in one step.",
@@ -198,7 +198,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "sweep_now",
+      name: "sweep-now",
       description:
         "Pull recent WhatsApp conversation history for tracked contacts, " +
         "summarise each conversation with Claude, and record interactions in Kit. " +
@@ -219,7 +219,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "kit_set_energy",
+      name: "kit-set-energy",
       description:
         "Set your social energy level for today. " +
         "This affects which contacts Kit surfaces in /kit-checkin. " +
@@ -237,12 +237,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "kit_get_energy",
+      name: "kit-get-energy",
       description: "Check what energy level is recorded for today.",
       inputSchema: { type: "object", properties: {}, required: [] },
     },
     {
-      name: "kit_reconnect_context",
+      name: "kit-reconnect-context",
       description:
         "Returns a reconnection brief for a dormant contact — how you know them, " +
         "last interaction, interests, suggested opener style, and a reassurance message " +
@@ -260,7 +260,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "kit_prep_card",
+      name: "kit-prep-card",
       description:
         "Returns a pre-flight brief for a contact — background, interests, sensitive topics, " +
         "open follow-ups, recent interactions, and Open Brain context. " +
@@ -277,7 +277,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "kit_draft_context",
+      name: "kit-draft-context",
       description:
         "Returns context for drafting a message to a contact. " +
         "Includes their background, interests, sensitive topics, last 3 interactions, " +
@@ -299,49 +299,49 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "kit_daily_checkin",
+      name: "kit-daily-checkin",
       description:
         "Run the daily relationship check-in. Reads today's energy level, loads all active " +
         "contacts, computes drift and safety indicators, surfaces open follow-ups and birthday " +
         "occasions, and returns a prioritised list of contacts to reach out to today. " +
-        "Requires energy to be set first via kit_set_energy.",
+        "Requires energy to be set first via kit-set-energy.",
       inputSchema: { type: "object", properties: {}, required: [] },
     },
     {
-      name: "kit_pending_captures",
+      name: "kit-pending-captures",
       description:
         "List WhatsApp conversations queued for review. Returns each pending capture with " +
-        "a summary, topics, and message count. Use kit_confirm_capture or kit_dismiss_capture " +
+        "a summary, topics, and message count. Use kit-confirm-capture or kit-dismiss-capture " +
         "to action them. Requires the Kit gateway to be running.",
       inputSchema: { type: "object", properties: {}, required: [] },
     },
     {
-      name: "kit_confirm_capture",
+      name: "kit-confirm-capture",
       description:
         "Confirm a pending WhatsApp capture — writes the interaction to Kit and Open Brain. " +
-        "Pass the contact ID shown in kit_pending_captures.",
+        "Pass the contact ID shown in kit-pending-captures.",
       inputSchema: {
         type: "object",
         properties: {
-          contact_id: { type: "string", description: "Contact ID from kit_pending_captures" },
+          contact_id: { type: "string", description: "Contact ID from kit-pending-captures" },
         },
         required: ["contact_id"],
       },
     },
     {
-      name: "kit_dismiss_capture",
+      name: "kit-dismiss-capture",
       description:
         "Dismiss a pending WhatsApp capture without saving anything.",
       inputSchema: {
         type: "object",
         properties: {
-          contact_id: { type: "string", description: "Contact ID from kit_pending_captures" },
+          contact_id: { type: "string", description: "Contact ID from kit-pending-captures" },
         },
         required: ["contact_id"],
       },
     },
     {
-      name: "set_contact_active",
+      name: "set-contact-active",
       description:
         "Mark a contact as active or inactive. Inactive contacts are hidden from " +
         "check-ins, prep cards, sweeps, and follow-up prompts but their records and " +
@@ -372,7 +372,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case "get_queue": {
+      case "get-queue": {
         const result = await getQueue();
         const lines: string[] = [];
 
@@ -403,7 +403,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(lines.join("\n"));
       }
 
-      case "get_contact": {
+      case "get-contact": {
         const detail = await getContact(String(args?.name_or_id ?? ""));
         if (!detail) return text(`No contact found for "${args?.name_or_id}".`);
 
@@ -451,7 +451,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(lines.join("\n"));
       }
 
-      case "search_contacts": {
+      case "search-contacts": {
         const results = await searchContacts(String(args?.query ?? ""));
         if (!results.length) return text(`No contacts found matching "${args?.query}".`);
         const lines = results.map(
@@ -460,7 +460,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(lines.join("\n"));
       }
 
-      case "log_interaction": {
+      case "log-interaction": {
         const msg = await logInteraction({
           contact_name: String(args?.contact_name ?? ""),
           notes: String(args?.notes ?? ""),
@@ -473,7 +473,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(msg);
       }
 
-      case "add_follow_up": {
+      case "add-follow-up": {
         const msg = await addFollowUp(
           String(args?.contact_name ?? ""),
           String(args?.text ?? "")
@@ -481,7 +481,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(msg);
       }
 
-      case "complete_follow_up": {
+      case "complete-follow-up": {
         const msg = await completeFollowUp(
           String(args?.contact_name ?? ""),
           String(args?.follow_up_text ?? "")
@@ -489,7 +489,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(msg);
       }
 
-      case "create_contact": {
+      case "create-contact": {
         const msg = await createContact({
           name: String(args?.name ?? ""),
           tier: (args?.tier ?? 3) as 1 | 2 | 3,
@@ -502,39 +502,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(msg);
       }
 
-      case "sweep_now": {
+      case "sweep-now": {
         const msg = await sweepNow(
           args?.contact_name ? String(args.contact_name) : undefined
         );
         return text(msg);
       }
 
-      case "kit_set_energy": {
+      case "kit-set-energy": {
         const msg = await setEnergy(String(args?.level ?? ""));
         return text(msg);
       }
 
-      case "kit_get_energy": {
+      case "kit-get-energy": {
         const msg = await getEnergy();
         return text(msg);
       }
 
-      case "kit_daily_checkin": {
+      case "kit-daily-checkin": {
         const msg = await dailyCheckin();
         return text(msg);
       }
 
-      case "kit_reconnect_context": {
+      case "kit-reconnect-context": {
         const msg = await kitReconnectContext(String(args?.contact_name ?? ""));
         return text(msg);
       }
 
-      case "kit_prep_card": {
+      case "kit-prep-card": {
         const msg = await kitPrepCard(String(args?.contact_name ?? ""));
         return text(msg);
       }
 
-      case "kit_draft_context": {
+      case "kit-draft-context": {
         const msg = await kitDraftContext(
           String(args?.contact_name ?? ""),
           args?.intent ? String(args.intent) : undefined
@@ -542,22 +542,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(msg);
       }
 
-      case "kit_pending_captures": {
+      case "kit-pending-captures": {
         const msg = await getPendingCaptures();
         return text(msg);
       }
 
-      case "kit_confirm_capture": {
+      case "kit-confirm-capture": {
         const msg = await confirmCapture(String(args?.contact_id ?? ""));
         return text(msg);
       }
 
-      case "kit_dismiss_capture": {
+      case "kit-dismiss-capture": {
         const msg = await dismissCapture(String(args?.contact_id ?? ""));
         return text(msg);
       }
 
-      case "set_contact_active": {
+      case "set-contact-active": {
         const msg = await setContactActive(
           String(args?.contact_name ?? ""),
           Boolean(args?.active),
