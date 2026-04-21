@@ -1,7 +1,7 @@
 /**
  * Sweep Scheduler
  *
- * Runs on a configurable interval (default: every 3 days) and pulls
+ * Runs on a configurable interval (default: every 3 hours) and pulls
  * recent WhatsApp conversation history for each tracked contact.
  *
  * For each contact that has had activity since the last sweep:
@@ -45,18 +45,18 @@ export class SweepScheduler {
   }
 
   /**
-   * Start the scheduler. Runs immediately on start, then every intervalDays.
+   * Start the scheduler. Runs immediately on start, then every intervalHours.
    * Safe to call multiple times — subsequent calls are no-ops.
    */
-  start(intervalDays: number): void {
+  start(intervalHours: number): void {
     if (this.timer) return;
 
-    const intervalMs = intervalDays * 24 * 60 * 60 * 1000;
+    const intervalMs = intervalHours * 60 * 60 * 1000;
 
     // Run immediately on first start, then on interval
     this.scheduleNext(intervalMs);
     console.log(
-      `🔄 Sweep scheduler started — running every ${intervalDays} day(s).`
+      `🔄 Sweep scheduler started — running every ${intervalHours} hour(s).`
     );
   }
 
@@ -286,7 +286,7 @@ export class SweepScheduler {
   /**
    * Load the watermark for a contact.
    * Returns epoch-ms of the last processed message, or a default
-   * lookback of (intervalDays * 2) days ago if never swept before.
+   * lookback of SWEEP_INITIAL_LOOKBACK_DAYS if never swept before.
    */
   private async loadWatermark(contactId: string): Promise<number> {
     const { data } = await this.supabase
@@ -300,8 +300,10 @@ export class SweepScheduler {
       return data.last_message_ts as number;
     }
 
-    // First-time sweep: look back 2× the interval to catch recent history
-    const defaultLookbackMs = config.SWEEP_INTERVAL_DAYS * 2 * 24 * 60 * 60 * 1000;
+    // First-time sweep: look back a fixed window to catch recent history.
+    // Decoupled from the run interval so frequent sweeps still backfill
+    // a meaningful slice the first time they see a contact.
+    const defaultLookbackMs = config.SWEEP_INITIAL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
     return Date.now() - defaultLookbackMs;
   }
 

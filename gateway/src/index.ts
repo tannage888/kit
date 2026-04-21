@@ -53,7 +53,7 @@ async function main() {
   // ── 4. Start sweep scheduler ───────────────────────────
   // Starts immediately; sweeps skip gracefully if daemon is unavailable.
 
-  sweepScheduler.start(config.SWEEP_INTERVAL_DAYS);
+  sweepScheduler.start(config.SWEEP_INTERVAL_HOURS);
 
   // ── 5. Start REST API ──────────────────────────────────
 

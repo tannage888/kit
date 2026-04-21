@@ -16,7 +16,8 @@ vi.mock("../config.js", () => ({
   config: {
     SUPABASE_URL: "https://test.supabase.co",
     SUPABASE_SERVICE_KEY: "test-key",
-    SWEEP_INTERVAL_DAYS: 3,
+    SWEEP_INTERVAL_HOURS: 3,
+    SWEEP_INITIAL_LOOKBACK_DAYS: 7,
   },
 }));
 
@@ -265,8 +266,8 @@ describe("SweepScheduler", () => {
     await scheduler.runSweep();
 
     const [, , sinceMs] = mockFetcher.fetchSince.mock.calls[0];
-    // Should be approximately 6 days ago (SWEEP_INTERVAL_DAYS * 2)
-    const expectedLookback = Date.now() - 6 * 24 * 60 * 60 * 1000;
+    // Should be approximately 7 days ago (SWEEP_INITIAL_LOOKBACK_DAYS)
+    const expectedLookback = Date.now() - 7 * 24 * 60 * 60 * 1000;
     expect(sinceMs).toBeGreaterThan(expectedLookback - 5000);
     expect(sinceMs).toBeLessThan(expectedLookback + 5000);
   });

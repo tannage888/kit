@@ -22,7 +22,7 @@ v1.0 scope is deliberately narrow. Items here are deferred, not rejected.
 
 ## v1.2 — Incoming message hook in the daemon
 
-The `claude_whatsapp_integration` migration doc notes the `WA_INCOMING_HOOK_URL` push is not yet implemented on the daemon side. Until it lands, live capture can't fire automatically — sweep-based capture (polled every `SWEEP_INTERVAL_DAYS`) is the fallback.
+The `claude_whatsapp_integration` migration doc notes the `WA_INCOMING_HOOK_URL` push is not yet implemented on the daemon side. Until it lands, live capture can't fire automatically — sweep-based capture (polled every `SWEEP_INTERVAL_HOURS`) is the fallback.
 
 Once the daemon supports the hook, no Kit-side changes needed; the gateway endpoint is already built in Phase 1.
 

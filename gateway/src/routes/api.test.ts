@@ -19,7 +19,8 @@ vi.mock("../config.js", () => ({
     SUPABASE_SERVICE_KEY: "test-key",
     EXTERNAL_GATEWAY_URL: "http://127.0.0.1:3142",
     CAPTURE_INACTIVITY_MINUTES: 30,
-    SWEEP_INTERVAL_DAYS: 3,
+    SWEEP_INTERVAL_HOURS: 3,
+    SWEEP_INITIAL_LOOKBACK_DAYS: 7,
   },
 }));
 

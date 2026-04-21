@@ -21,7 +21,8 @@ const envSchema = z.object({
   EXTERNAL_GATEWAY_URL: z.string().url().default("http://127.0.0.1:3142"),
 
   // Sweep scheduler
-  SWEEP_INTERVAL_DAYS: z.coerce.number().default(3),
+  SWEEP_INTERVAL_HOURS: z.coerce.number().default(3),
+  SWEEP_INITIAL_LOOKBACK_DAYS: z.coerce.number().default(7),
   SWEEP_MAX_MESSAGES_PER_CONTACT: z.coerce.number().default(500),
   SWEEP_CONVERSATION_GAP_HOURS: z.coerce.number().default(8),
 });
