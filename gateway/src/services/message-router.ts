@@ -14,7 +14,7 @@
 
 import { config } from "../config.js";
 import { ContactRegistry } from "./contacts.js";
-import { CapturePipeline } from "./capture.js";
+import { CapturePipeline, type CaptureOptions } from "./capture.js";
 import type { WhatsAppMessage, ConversationThread, TrackedContact } from "../types.js";
 
 export class MessageRouter {
@@ -64,7 +64,10 @@ export class MessageRouter {
    * Used for on-demand capture (the "Save this conversation" button).
    * Works regardless of wa_capture setting.
    */
-  async triggerCapture(contactId: string): Promise<boolean> {
+  async triggerCapture(
+    contactId: string,
+    opts: CaptureOptions = {}
+  ): Promise<boolean> {
     const contact = this.contacts.getById(contactId);
     if (!contact) return false;
 
@@ -77,7 +80,7 @@ export class MessageRouter {
     this.clearTimer(jid);
 
     // Hand to capture pipeline
-    await this.capture.process(thread);
+    await this.capture.process(thread, opts);
 
     // Clean up the buffered thread
     this.threads.delete(jid);

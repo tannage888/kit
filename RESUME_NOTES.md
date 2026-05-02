@@ -16,12 +16,13 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 - Phase 8 ✅ — Reconnect context + /kit-reconnect (174 tests)
 - Phase 9 ✅ — WhatsApp capture wiring: message-router filter, MCP tools kit-pending-captures/confirm/dismiss, /kit-captures, daemon setup docs (179 tests)
 - Phase 10 ✅ — E2e smoke test + manual test plan (194 tests, 2026-04-19)
+- Phase 11 ✅ — ZIP transcript ingestion: resolver endpoint, import-complete webhook, ImportIngestor service, source-tagged review cards, daemon-side wiring docs (212 tests, 2026-05-02)
 
 ---
 
-## Current status: ALL PHASES COMPLETE ✅
+## Current status: Phase 11 complete
 
-**Total: 194 tests passing, 12 test files**
+**Total: 212 tests passing, 13 test files**
 
 ### Deliverables shipped
 
@@ -32,6 +33,7 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 - `services/reconnect.ts` — buildReconnectContext
 - `services/energy.ts` — EnergyService + isEnergyLevel
 - `services/message-router.ts` — whatsapp_capture + wa_capture filter chain
+- `services/import-ingestor.ts` — pulls daemon transcript after ZIP import, routes through MessageRouter, drains capture (Phase 11)
 
 **MCP tools (gateway/src/mcp/):**
 - server.ts: kit-set-energy, kit-get-energy, kit-daily-checkin, kit-prep-card, kit-draft-context, kit-reconnect-context, kit-pending-captures, kit-confirm-capture, kit-dismiss-capture, set-contact-active

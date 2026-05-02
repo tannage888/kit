@@ -21,6 +21,7 @@ import { CapturePipeline } from "./services/capture.js";
 import { MessageRouter } from "./services/message-router.js";
 import { HistoryFetcher } from "./services/history-fetcher.js";
 import { SweepScheduler } from "./services/sweep-scheduler.js";
+import { ImportIngestor } from "./services/import-ingestor.js";
 import { createApiRouter } from "./routes/api.js";
 import { SyncService } from "./services/sync.js";
 
@@ -40,6 +41,11 @@ async function main() {
   const messageRouter = new MessageRouter(contacts, capture);
   const fetcher = new HistoryFetcher(config.EXTERNAL_GATEWAY_URL);
   const sweepScheduler = new SweepScheduler(contacts, capture, fetcher);
+  const importIngestor = new ImportIngestor(
+    contacts,
+    messageRouter,
+    config.EXTERNAL_GATEWAY_URL
+  );
 
   // ── 2. Start bidirectional markdown↔Supabase sync ─────
 
@@ -61,7 +67,7 @@ async function main() {
   app.use(express.json());
 
   const apiRouter = createApiRouter(
-    contacts, messageRouter, capture, sweepScheduler, startedAt
+    contacts, messageRouter, capture, sweepScheduler, importIngestor, startedAt
   );
   app.use("/api", apiRouter);
 
@@ -72,6 +78,7 @@ async function main() {
     console.log(`🚀 REST API listening on http://localhost:${config.PORT}`);
     console.log(`   Status:      GET  /api/status`);
     console.log(`   Incoming:    POST /api/incoming-message`);
+    console.log(`   ZIP import:  POST /api/zip-import-complete`);
     console.log(`   Contacts:    GET  /api/contacts`);
     console.log(`   Captures:    GET  /api/captures/pending`);
     console.log(`   Sweep:       POST /api/sweep/run`);

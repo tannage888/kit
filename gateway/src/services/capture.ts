@@ -27,6 +27,11 @@ import type {
   Sentiment,
 } from "../types.js";
 
+export interface CaptureOptions {
+  /** Marks the capture's origin so review-card text can flag it. */
+  source?: "zip-import";
+}
+
 export class CapturePipeline {
   private anthropic: Anthropic;
   private kit: SupabaseClient;
@@ -53,12 +58,15 @@ export class CapturePipeline {
    * Nothing is written until the user calls confirm().
    * Used by the live message router (FR-13 auto/on-demand capture).
    */
-  async process(thread: ConversationThread): Promise<CaptureResult> {
+  async process(
+    thread: ConversationThread,
+    opts: CaptureOptions = {}
+  ): Promise<CaptureResult> {
     console.log(
       `🧠 Summarising ${thread.messages.length} messages with ${thread.contact.name}...`
     );
 
-    const result = await this.summarise(thread);
+    const result = await this.summarise(thread, opts);
 
     // Queue for user review — nothing is stored until confirmed
     this.pendingReviews.set(thread.contact.id, result);
@@ -182,7 +190,10 @@ export class CapturePipeline {
 
   // ── Private: Claude summarisation ───────────────────────
 
-  private async summarise(thread: ConversationThread): Promise<CaptureResult> {
+  private async summarise(
+    thread: ConversationThread,
+    opts: CaptureOptions = {}
+  ): Promise<CaptureResult> {
     const transcript = thread.messages
       .map((m) => {
         const who = m.fromMe ? "Me" : thread.contact.name;
@@ -243,6 +254,11 @@ ${transcript}`,
       ? parsed.sentiment
       : "neutral") as Sentiment;
 
+    const summaryPrefix =
+      opts.source === "zip-import"
+        ? `Imported WhatsApp transcript with ${thread.contact.name}`
+        : `Spoke with ${thread.contact.name} about`;
+
     return {
       contactName: thread.contact.name,
       date: new Date(thread.startedAt).toISOString().split("T")[0],
@@ -250,7 +266,7 @@ ${transcript}`,
       followUps: parsed.follow_ups,
       sentiment,
       channel: "whatsapp",
-      summary: `Spoke with ${thread.contact.name} about: ${parsed.topics}`,
+      summary: `${summaryPrefix}: ${parsed.topics}`,
     };
   }
 }

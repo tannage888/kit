@@ -101,3 +101,34 @@ describe("MessageRouter — whatsapp_capture filtering", () => {
     expect(router.activeThreadCount).toBe(1);
   });
 });
+
+describe("MessageRouter — triggerCapture options", () => {
+  it("forwards source option to capture.process so import card can be tagged", async () => {
+    const contact = makeContact({ wa_capture: "on_demand" });
+    const { router, mockCapture } = makeRouter(contact);
+
+    router.handleMessage(makeMsg());
+
+    const ok = await router.triggerCapture("contact-1", { source: "zip-import" });
+
+    expect(ok).toBe(true);
+    expect(mockCapture.process).toHaveBeenCalledWith(
+      expect.objectContaining({ contact }),
+      { source: "zip-import" }
+    );
+  });
+
+  it("defaults to no opts when called without a source", async () => {
+    const contact = makeContact({ wa_capture: "on_demand" });
+    const { router, mockCapture } = makeRouter(contact);
+
+    router.handleMessage(makeMsg());
+
+    await router.triggerCapture("contact-1");
+
+    expect(mockCapture.process).toHaveBeenCalledWith(
+      expect.objectContaining({ contact }),
+      {}
+    );
+  });
+});

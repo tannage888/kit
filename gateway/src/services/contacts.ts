@@ -87,6 +87,25 @@ export class ContactRegistry {
     return this.byId.get(id);
   }
 
+  /**
+   * Case-insensitive exact-name lookup. Used by the daemon's NameResolver
+   * fallback when a WhatsApp ZIP-export filename can't be matched against
+   * the daemon's own chats table.
+   */
+  findByName(name: string): TrackedContact | undefined {
+    const target = name.trim().toLowerCase();
+    if (!target) return undefined;
+    for (const contact of this.byId.values()) {
+      if (contact.name.trim().toLowerCase() === target) return contact;
+    }
+    return undefined;
+  }
+
+  /** Synthesise the WhatsApp JID for a tracked contact. */
+  jidFor(contact: TrackedContact): string {
+    return this.e164ToJid(contact.whatsapp);
+  }
+
   /** Update capture mode for a contact */
   setCaptureMode(contactId: string, mode: CaptureMode): boolean {
     const contact = this.byId.get(contactId);

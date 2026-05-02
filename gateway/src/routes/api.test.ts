@@ -32,6 +32,8 @@ function makeRouter() {
     getAll: vi.fn().mockReturnValue([]),
     getById: vi.fn(),
     getByJid: vi.fn(),
+    findByName: vi.fn(),
+    jidFor: vi.fn((c: any) => `${c.whatsapp.replace(/^\+/, "")}@s.whatsapp.net`),
     loadFromDatabase: vi.fn().mockResolvedValue(5),
     register: vi.fn(),
     unregister: vi.fn().mockReturnValue(true),
@@ -60,6 +62,12 @@ function makeRouter() {
     runSweep: vi.fn().mockResolvedValue({ contactsSwept: 0, threadsProcessed: 0 }),
   };
 
+  const mockIngestor = {
+    ingest: vi
+      .fn()
+      .mockResolvedValue({ status: "ok", ingested: 0, captureQueued: false }),
+  };
+
   const app = express();
   app.use(express.json());
   app.use(
@@ -69,11 +77,12 @@ function makeRouter() {
       mockRouter as any,
       mockCapture as any,
       mockSweep as any,
+      mockIngestor as any,
       Date.now()
     )
   );
 
-  return { app, mockContacts, mockRouter, mockCapture, mockSweep };
+  return { app, mockContacts, mockRouter, mockCapture, mockSweep, mockIngestor };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -124,6 +133,114 @@ describe("POST /api/incoming-message", () => {
     });
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/contacts/resolve-name", () => {
+  it("returns jid + contactId for a known contact", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.findByName.mockReturnValue({
+      id: "alice-123",
+      name: "Alice Smith",
+      whatsapp: "+447700900001",
+    });
+
+    const res = await request(app)
+      .post("/api/contacts/resolve-name")
+      .send({ name: "Alice Smith" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      jid: "447700900001@s.whatsapp.net",
+      contactId: "alice-123",
+    });
+    expect(mockContacts.findByName).toHaveBeenCalledWith("Alice Smith");
+  });
+
+  it("returns nulls when the name is unknown", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.findByName.mockReturnValue(undefined);
+
+    const res = await request(app)
+      .post("/api/contacts/resolve-name")
+      .send({ name: "Nobody" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ jid: null, contactId: null });
+  });
+
+  it("rejects an empty body", async () => {
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/contacts/resolve-name").send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_body");
+  });
+});
+
+describe("POST /api/zip-import-complete", () => {
+  it("delegates to importIngestor.ingest and echoes the result", async () => {
+    const { app, mockIngestor } = makeRouter();
+    mockIngestor.ingest.mockResolvedValue({
+      status: "ok",
+      ingested: 12,
+      captureQueued: true,
+    });
+
+    const res = await request(app).post("/api/zip-import-complete").send({
+      chatJid: "447700900001@s.whatsapp.net",
+      imported: 12,
+      duplicates: 3,
+      textFile: "WhatsApp Chat with Alice.txt",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      status: "ok",
+      ingested: 12,
+      captureQueued: true,
+    });
+    expect(mockIngestor.ingest).toHaveBeenCalledWith("447700900001@s.whatsapp.net");
+  });
+
+  it("forwards a soft skip from the ingestor as 200 ok", async () => {
+    const { app, mockIngestor } = makeRouter();
+    mockIngestor.ingest.mockResolvedValue({
+      status: "skipped",
+      reason: "unknown_contact",
+    });
+
+    const res = await request(app)
+      .post("/api/zip-import-complete")
+      .send({ chatJid: "999@s.whatsapp.net" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      status: "skipped",
+      reason: "unknown_contact",
+    });
+  });
+
+  it("rejects a missing chatJid", async () => {
+    const { app, mockIngestor } = makeRouter();
+    const res = await request(app).post("/api/zip-import-complete").send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_body");
+    expect(mockIngestor.ingest).not.toHaveBeenCalled();
+  });
+
+  it("returns 502 when the ingestor throws (daemon unreachable)", async () => {
+    const { app, mockIngestor } = makeRouter();
+    mockIngestor.ingest.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const res = await request(app)
+      .post("/api/zip-import-complete")
+      .send({ chatJid: "447700900001@s.whatsapp.net" });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe("ingest_failed");
+    expect(res.body.detail).toMatch(/ECONNREFUSED/);
   });
 });
 

@@ -256,6 +256,38 @@ Each phase lists **goal**, **deliverables**, and **completion criteria** (a gree
 
 ---
 
+### Phase 11 — ZIP transcript ingestion
+
+Added 2026-05-02, post-v1.0. Wires the daemon's existing self-sent ZIP-export importer (claude_whatsapp_integration Phase 14) into Kit's capture pipeline so the user can WhatsApp themselves an "Export Chat" ZIP and have it surface in `/kit-captures` like a live conversation.
+
+**Goal:** Imported transcripts flow through the same `MessageRouter → CapturePipeline → /kit-captures` path as live messages, with the review card prefixed "Imported WhatsApp transcript with …" so the origin is visible.
+
+**Deliverables:**
+- `gateway/src/services/contacts.ts` — `findByName(name)` + `jidFor(contact)` helpers
+- `gateway/src/routes/api.ts` — `POST /api/contacts/resolve-name` (daemon's NameResolver hook) and `POST /api/zip-import-complete` (daemon's import-complete webhook)
+- `gateway/src/services/import-ingestor.ts` — pulls the new transcript from the daemon (`GET /api/chats/:jid/messages?mode=since_last_review`), routes each message through `MessageRouter.handleMessage`, drains synchronously via `triggerCapture(contactId, {source: "zip-import"})`, acks the watermark
+- `gateway/src/services/capture.ts` — optional `CaptureOptions { source?: "zip-import" }` threaded through `process` → `summarise`; review-card summary prefix changes for imports
+- `gateway/src/services/message-router.ts` — `triggerCapture(contactId, opts?)` forwards opts to `capture.process`
+- `docs/whatsapp-daemon-setup.md` — companion daemon-side wiring (replace `kitNameResolver` with the targeted POST, replace `onImport` logger with the webhook POST, mirror into manual ZIP upload + CLI paths)
+
+**Tests added:**
+- `gateway/src/services/import-ingestor.test.ts` — 7 cases covering happy path, unknown contact, capture_disabled, empty transcript, wa_capture:off (drops but acks), failed transcript fetch, best-effort ack
+- `gateway/src/routes/api.test.ts` — 4 cases for resolve-name + 4 cases for zip-import-complete
+- `gateway/src/services/message-router.test.ts` — 2 cases verifying `triggerCapture` opts forwarding
+
+**Design decisions:**
+- **Pull, not push** — daemon webhook carries a small JSON envelope; Kit calls back over the existing transcript+ack endpoints rather than re-uploading the messages.
+- **Bypass inactivity buffer** — a ZIP transcript is complete by definition; ingestor calls `triggerCapture` synchronously after pushing all messages instead of waiting for the auto-capture timer.
+- **Privacy posture preserved** — `whatsapp_capture: disabled` short-circuits at the ingestor; `wa_capture: off` drops all messages at `MessageRouter` (capture not queued), but the watermark is still acked so the same import doesn't reappear.
+- **No auth between daemon and Kit** — both run on `127.0.0.1`; inherits the existing posture from live capture.
+
+**Completion criteria:**
+- `npm test` green (212 tests)
+- `npx tsc --noEmit` shows no new errors vs main (existing 6 e2e.test.ts errors remain pre-existing)
+- Daemon-side companion wiring documented in `docs/whatsapp-daemon-setup.md`
+
+---
+
 ## Test strategy
 
 - **Unit tests** — every pure function (drift, safety, energy reset, thread grouping) has a dedicated `*.test.ts`

@@ -15,6 +15,7 @@ import { ContactRegistry } from "../services/contacts.js";
 import { MessageRouter } from "../services/message-router.js";
 import { CapturePipeline } from "../services/capture.js";
 import { SweepScheduler } from "../services/sweep-scheduler.js";
+import { ImportIngestor } from "../services/import-ingestor.js";
 import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
 import type { CaptureMode, GatewayStatus, TrackedContact } from "../types.js";
 
@@ -23,6 +24,7 @@ export function createApiRouter(
   router: MessageRouter,
   capture: CapturePipeline,
   sweep: SweepScheduler,
+  importIngestor: ImportIngestor,
   startedAt: number
 ): Router {
   const api = Router();
@@ -98,6 +100,51 @@ export function createApiRouter(
   api.post("/contacts/refresh", async (_req: Request, res: Response) => {
     const count = await contacts.loadFromDatabase();
     res.json({ ok: true, count });
+  });
+
+  // Name → JID resolver. Used by the WhatsApp daemon's NameResolver hook
+  // when a ZIP-export filename can't be matched against the daemon's own
+  // chats table — Kit's contact registry is the second-chance lookup.
+  const resolveNameSchema = z.object({ name: z.string().min(1) });
+
+  api.post("/contacts/resolve-name", (req: Request, res: Response) => {
+    const parsed = resolveNameSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", details: parsed.error.issues });
+      return;
+    }
+    const contact = contacts.findByName(parsed.data.name);
+    if (!contact) {
+      res.json({ jid: null, contactId: null });
+      return;
+    }
+    res.json({ jid: contacts.jidFor(contact), contactId: contact.id });
+  });
+
+  // ── ZIP import completion (from the WhatsApp daemon) ─────
+  // The daemon calls this after a successful "Export Chat" ZIP import.
+  // Kit then pulls the new messages from the daemon and routes them
+  // through MessageRouter so the user gets a /kit-captures review card.
+
+  const zipImportSchema = z.object({
+    chatJid: z.string().min(1),
+    imported: z.number().int().nonnegative().optional(),
+    duplicates: z.number().int().nonnegative().optional(),
+    textFile: z.string().optional(),
+  });
+
+  api.post("/zip-import-complete", async (req: Request, res: Response) => {
+    const parsed = zipImportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", details: parsed.error.issues });
+      return;
+    }
+    try {
+      const result = await importIngestor.ingest(parsed.data.chatJid);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      res.status(502).json({ error: "ingest_failed", detail: err.message });
+    }
   });
 
   const registerSchema = z.object({
