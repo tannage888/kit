@@ -47,7 +47,9 @@ export class ImportIngestor {
 
   async ingest(chatJid: string): Promise<IngestResult> {
     const contact = this.contacts.getByJid(chatJid);
-    if (!contact) return { status: "skipped", reason: "unknown_contact" };
+    if (!contact) {
+      return { status: "skipped", reason: "unknown_contact" };
+    }
     if (contact.whatsapp_capture === "disabled") {
       return { status: "skipped", reason: "capture_disabled" };
     }
@@ -68,10 +70,6 @@ export class ImportIngestor {
       });
     }
 
-    // Drain whatever was buffered straight away — a ZIP export is by
-    // definition complete, so we don't wait for the inactivity timer.
-    // triggerCapture returns false silently when wa_capture: "off"
-    // (handleMessage dropped everything; nothing to drain).
     const captureQueued = await this.router.triggerCapture(contact.id, {
       source: "zip-import",
     });
@@ -86,7 +84,11 @@ export class ImportIngestor {
   }
 
   private async fetchTranscript(chatJid: string): Promise<DaemonTranscript> {
-    const url = `${this.daemonUrl}/api/chats/${encodeURIComponent(chatJid)}/messages?mode=since_last_review`;
+    // mode=full not since_last_review: ZIP exports usually contain historical
+    // messages older than the daemon's "live capture" watermark, so
+    // since_last_review would filter them all out. The dedup happens further
+    // downstream in CapturePipeline (and on the user's review/dismiss).
+    const url = `${this.daemonUrl}/api/chats/${encodeURIComponent(chatJid)}/messages?mode=full`;
     const res = await this.fetchFn(url);
     if (!res.ok) {
       throw new Error(

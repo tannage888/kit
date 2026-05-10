@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "kit": {
+      "command": "npm",
+      "args": ["--prefix", "gateway", "run", "--silent", "mcp"]
+    }
+  }
+}

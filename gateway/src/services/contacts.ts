@@ -12,10 +12,14 @@ import { config } from "../config.js";
 import type { CaptureMode, TrackedContact } from "../types.js";
 
 export class ContactRegistry {
-  /** JID → TrackedContact for O(1) lookup on message events */
+  /** JID → TrackedContact for O(1) lookup on WhatsApp message events */
   private byJid: Map<string, TrackedContact> = new Map();
   /** Contact ID → TrackedContact for API lookups */
   private byId: Map<string, TrackedContact> = new Map();
+  /** LinkedIn username (slug) → TrackedContact */
+  private byLinkedin: Map<string, TrackedContact> = new Map();
+  /** Instagram username (without @) → TrackedContact */
+  private byInstagram: Map<string, TrackedContact> = new Map();
   private supabase: SupabaseClient;
 
   constructor() {
@@ -30,8 +34,7 @@ export class ContactRegistry {
     const { data, error } = await this.supabase
       .schema("kit")
       .from("contacts")
-      .select("id, name, whatsapp, tier, wa_capture, frequency, frequency_days, last_contact, whatsapp_capture")
-      .not("whatsapp", "is", null);
+      .select("id, name, whatsapp, tier, wa_capture, frequency, frequency_days, last_contact, whatsapp_capture, linkedin_username, linkedin_capture, instagram_username, instagram_capture");
 
     if (error) {
       console.error("❌ Failed to load contacts from Supabase:", error.message);
@@ -40,6 +43,8 @@ export class ContactRegistry {
 
     this.byJid.clear();
     this.byId.clear();
+    this.byLinkedin.clear();
+    this.byInstagram.clear();
 
     for (const row of data ?? []) {
       const contact: TrackedContact = {
@@ -52,6 +57,10 @@ export class ContactRegistry {
         frequency_days: row.frequency_days ?? frequencyToDays(row.frequency),
         last_contact: row.last_contact,
         whatsapp_capture: row.whatsapp_capture === "enabled" ? "enabled" : "disabled",
+        linkedin_username: row.linkedin_username ?? null,
+        linkedin_capture: row.linkedin_capture === "enabled" ? "enabled" : "disabled",
+        instagram_username: row.instagram_username ?? null,
+        instagram_capture: row.instagram_capture === "enabled" ? "enabled" : "disabled",
       };
       this.register(contact);
     }
@@ -62,17 +71,21 @@ export class ContactRegistry {
 
   /** Register or update a contact in the in-memory registry */
   register(contact: TrackedContact): void {
-    const jid = this.e164ToJid(contact.whatsapp);
-    this.byJid.set(jid, contact);
+    if (contact.whatsapp) {
+      this.byJid.set(this.e164ToJid(contact.whatsapp), contact);
+    }
     this.byId.set(contact.id, contact);
+    if (contact.linkedin_username) this.byLinkedin.set(contact.linkedin_username.toLowerCase(), contact);
+    if (contact.instagram_username) this.byInstagram.set(contact.instagram_username.toLowerCase().replace(/^@/, ""), contact);
   }
 
   /** Remove a contact from tracking */
   unregister(contactId: string): boolean {
     const contact = this.byId.get(contactId);
     if (!contact) return false;
-    const jid = this.e164ToJid(contact.whatsapp);
-    this.byJid.delete(jid);
+    if (contact.whatsapp) this.byJid.delete(this.e164ToJid(contact.whatsapp));
+    if (contact.linkedin_username) this.byLinkedin.delete(contact.linkedin_username.toLowerCase());
+    if (contact.instagram_username) this.byInstagram.delete(contact.instagram_username.toLowerCase().replace(/^@/, ""));
     this.byId.delete(contactId);
     return true;
   }
@@ -85,6 +98,16 @@ export class ContactRegistry {
   /** Look up by contact ID */
   getById(id: string): TrackedContact | undefined {
     return this.byId.get(id);
+  }
+
+  /** Look up by LinkedIn profile slug */
+  getByLinkedinUsername(username: string): TrackedContact | undefined {
+    return this.byLinkedin.get(username.toLowerCase());
+  }
+
+  /** Look up by Instagram handle (with or without leading @) */
+  getByInstagramUsername(username: string): TrackedContact | undefined {
+    return this.byInstagram.get(username.toLowerCase().replace(/^@/, ""));
   }
 
   /**
@@ -103,6 +126,7 @@ export class ContactRegistry {
 
   /** Synthesise the WhatsApp JID for a tracked contact. */
   jidFor(contact: TrackedContact): string {
+    if (!contact.whatsapp) throw new Error(`Contact ${contact.name} has no WhatsApp number`);
     return this.e164ToJid(contact.whatsapp);
   }
 

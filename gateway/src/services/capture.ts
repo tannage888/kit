@@ -24,8 +24,21 @@ import { ContactRegistry } from "./contacts.js";
 import type {
   ConversationThread,
   CaptureResult,
+  Channel,
   Sentiment,
 } from "../types.js";
+
+function channelDisplayName(channel: Channel): string {
+  switch (channel) {
+    case "whatsapp":  return "WhatsApp";
+    case "linkedin":  return "LinkedIn";
+    case "instagram": return "Instagram";
+    case "call":      return "Phone call";
+    case "in-person": return "In-person";
+    case "email":     return "Email";
+    default:          return channel;
+  }
+}
 
 export interface CaptureOptions {
   /** Marks the capture's origin so review-card text can flag it. */
@@ -162,8 +175,9 @@ export class CapturePipeline {
 
     // 3. Write to Open Brain via ContextBinder
     const entity = toCanonicalName(result.contactName);
+    const channelLabel = channelDisplayName(result.channel);
     const thoughtContent = [
-      `WhatsApp conversation with ${result.contactName} on ${result.date}.`,
+      `${channelLabel} conversation with ${result.contactName} on ${result.date}.`,
       result.topics,
     ].join("\n");
 
@@ -173,7 +187,7 @@ export class CapturePipeline {
       thoughtType: ThoughtType.INTERACTION,
       extraTopics: [result.channel, result.sentiment],
       people: [result.contactName],
-      source: "whatsapp-gateway",
+      source: "kit-gateway",
     });
 
     // 4. Write follow-ups as NEXT_ACTION thoughts
@@ -183,7 +197,7 @@ export class CapturePipeline {
         entity,
         thoughtType: ThoughtType.NEXT_ACTION,
         people: [result.contactName],
-        source: "whatsapp-gateway",
+        source: "kit-gateway",
       });
     }
   }
@@ -205,11 +219,12 @@ export class CapturePipeline {
       })
       .join("\n");
 
+    const channelLabel = channelDisplayName(thread.channel);
     const response = await this.anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: `You are a conversation summariser for Kit, a personal relationship management app.
-You will be given a WhatsApp conversation transcript between the user and one of their contacts.
+You will be given a ${channelLabel} conversation transcript between the user and one of their contacts.
 
 Produce a JSON object with exactly these fields:
 - "topics": a concise summary of what was discussed (2-3 sentences max)
@@ -265,7 +280,7 @@ ${transcript}`,
       topics: parsed.topics,
       followUps: parsed.follow_ups,
       sentiment,
-      channel: "whatsapp",
+      channel: thread.channel,
       summary: `${summaryPrefix}: ${parsed.topics}`,
     };
   }

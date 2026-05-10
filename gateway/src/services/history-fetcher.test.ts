@@ -33,6 +33,10 @@ const contact: TrackedContact = {
   frequency_days: 7,
   last_contact: "2026-04-01",
   whatsapp_capture: "disabled",
+  linkedin_username: null,
+  linkedin_capture: "disabled",
+  instagram_username: null,
+  instagram_capture: "disabled",
 };
 
 function fakeMsg(

@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "node --loader tsx src/index.ts",
-    "mcp": "tsx src/mcp/server.ts",
+    "start": "node --import tsx src/index.ts",
+    "mcp": "tsx --env-file=.env src/mcp/server.ts",
     "build": "tsc",
     "lint": "eslint src/",
     "test": "vitest run",

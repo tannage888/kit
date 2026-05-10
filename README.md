@@ -81,6 +81,42 @@ Log interactions and manage follow-ups:
 /kit-followup             add or complete a follow-up item
 ```
 
+## Running on Windows startup
+
+The gateway and WhatsApp daemon can be registered as Task Scheduler tasks that fire at logon and survive across VS Code sessions. Run this PowerShell block once (no admin needed — tasks run as the current user):
+
+```powershell
+$tasks = @(
+  @{ Name = 'KitGateway';     Path = "$PWD\scripts\start-gateway.bat" },
+  @{ Name = 'WhatsAppDaemon'; Path = "$PWD\scripts\start-whatsapp-daemon.bat" }
+)
+foreach ($t in $tasks) {
+  $action    = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$($t.Path)`""
+  $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+  $settings  = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+                  -RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 3 `
+                  -ExecutionTimeLimit ([TimeSpan]::Zero)
+  $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+  Register-ScheduledTask -TaskName $t.Name -Action $action -Trigger $trigger `
+                          -Settings $settings -Principal $principal -Force
+}
+```
+
+Run from the repo root so `$PWD` resolves to the kit directory. Tasks run hidden (no console windows) — output goes to `logs\gateway.log` and `logs\whatsapp-daemon.log`.
+
+**Node ≥ 20.6 / tsx requirement.** Both `package.json` `start` scripts must use `node --import tsx` (not the deprecated `--loader tsx`). Node 24 will reject the loader form and the task will exit immediately. Both scripts in this repo are already on `--import`; if you regenerate them, keep that flag.
+
+**WhatsApp daemon first-run.** The daemon needs a QR scan to authenticate. Because the scheduled task runs hidden, do the first auth manually (`npm run dev` in the daemon repo) before relying on the scheduled task. Subsequent restarts reuse `auth_state/kit/` and need no UI.
+
+Manage tasks from PowerShell:
+
+```powershell
+Get-ScheduledTask -TaskName KitGateway,WhatsAppDaemon | ft TaskName,State
+Start-ScheduledTask -TaskName KitGateway              # start now
+Stop-ScheduledTask  -TaskName KitGateway              # stop
+Unregister-ScheduledTask -TaskName KitGateway,WhatsAppDaemon -Confirm:$false   # uninstall
+```
+
 ## WhatsApp capture (optional)
 
 Kit can buffer live WhatsApp messages for tracked contacts and queue them for your review before anything is stored. This requires the `claude_whatsapp_integration` daemon running on port 3142.

@@ -191,7 +191,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           whatsapp: {
             type: "string",
-            description: "WhatsApp number or JID if known",
+            description: "WhatsApp number in E.164 format (e.g. \"+44 7956 289692\") if known",
+          },
+          whatsapp_capture: {
+            type: "string",
+            enum: ["enabled", "disabled"],
+            description:
+              "Opt the contact in or out of WhatsApp capture (live + ZIP imports). " +
+              "Defaults to disabled (privacy-by-default per Kit spec §6.3).",
+          },
+          wa_capture: {
+            type: "string",
+            enum: ["auto", "on_demand", "off"],
+            description:
+              "Capture mode when whatsapp_capture is enabled: " +
+              "auto = summarise after 30min inactivity, on_demand = buffer until /kit-captures, off = drop. " +
+              "Defaults to on_demand.",
           },
         },
         required: ["name", "tier", "frequency"],
@@ -498,6 +513,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           notes: args?.notes ? String(args.notes) : undefined,
           social_battery_cost: args?.social_battery_cost ? String(args.social_battery_cost) : undefined,
           whatsapp: args?.whatsapp ? String(args.whatsapp) : undefined,
+          whatsapp_capture: args?.whatsapp_capture as "enabled" | "disabled" | undefined,
+          wa_capture: args?.wa_capture as "auto" | "on_demand" | "off" | undefined,
         });
         return text(msg);
       }

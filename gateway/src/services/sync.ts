@@ -237,7 +237,11 @@ export class SyncService {
       if (row.whatsapp) raw = setFrontmatterField(raw, "whatsapp", `"${row.whatsapp}"`);
       if (row.preferred_channel) raw = setFrontmatterField(raw, "preferred_channel", row.preferred_channel);
       if (row.birthday) raw = setFrontmatterField(raw, "birthday", `"${row.birthday}"`);
-      if (row.whatsapp_capture) raw = setFrontmatterField(raw, "whatsapp_capture", row.whatsapp_capture);
+      if (row.whatsapp_capture)   raw = setFrontmatterField(raw, "whatsapp_capture",   row.whatsapp_capture);
+      if (row.linkedin_username)  raw = setFrontmatterField(raw, "linkedin_username",  row.linkedin_username);
+      if (row.linkedin_capture)   raw = setFrontmatterField(raw, "linkedin_capture",   row.linkedin_capture);
+      if (row.instagram_username) raw = setFrontmatterField(raw, "instagram_username", row.instagram_username);
+      if (row.instagram_capture)  raw = setFrontmatterField(raw, "instagram_capture",  row.instagram_capture);
       fs.writeFileSync(filePath, raw, "utf-8");
     } catch (err) {
       console.error(`  ✗ frontmatter update failed:`, err);
@@ -338,11 +342,13 @@ export class SyncService {
 
 function channelLabel(channel: string | null | undefined): string {
   switch (channel?.toLowerCase()) {
-    case "whatsapp": return "WhatsApp";
-    case "email":    return "Email";
-    case "call":     return "Call";
+    case "whatsapp":  return "WhatsApp";
+    case "linkedin":  return "LinkedIn";
+    case "instagram": return "Instagram";
+    case "email":     return "Email";
+    case "call":      return "Call";
     case "in_person":
     case "in person": return "In Person";
-    default:         return channel ?? "App";
+    default:          return channel ?? "App";
   }
 }

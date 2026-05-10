@@ -154,6 +154,7 @@ export class HistoryFetcher {
       messages,
       startedAt: messages[0].timestamp,
       lastActivityAt: messages[messages.length - 1].timestamp,
+      channel: "whatsapp",
     };
   }
 }

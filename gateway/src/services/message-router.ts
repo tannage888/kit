@@ -15,12 +15,15 @@
 import { config } from "../config.js";
 import { ContactRegistry } from "./contacts.js";
 import { CapturePipeline, type CaptureOptions } from "./capture.js";
-import type { WhatsAppMessage, ConversationThread, TrackedContact } from "../types.js";
+import type { WhatsAppMessage, Message, ConversationThread, TrackedContact, Channel } from "../types.js";
 
 export class MessageRouter {
-  /** JID → active conversation thread being buffered */
+  /**
+   * Thread key → active conversation thread being buffered.
+   * WhatsApp threads use the JID as key; other channels use "{channel}:{contactId}".
+   */
   private threads: Map<string, ConversationThread> = new Map();
-  /** JID → inactivity timeout handle */
+  /** Thread key → inactivity timeout handle */
   private timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   private readonly inactivityMs: number;
@@ -33,36 +36,48 @@ export class MessageRouter {
   }
 
   /**
-   * Route an incoming or outgoing message.
-   * Called by the WhatsApp connection's message event handlers.
+   * Route an incoming or outgoing WhatsApp message.
+   * Called by the WhatsApp daemon push endpoint.
    */
   handleMessage(msg: WhatsAppMessage): void {
     const contact = this.contacts.getByJid(msg.remoteJid);
-
-    // Not a tracked contact — ignore silently
     if (!contact) return;
-
-    // Contact has not opted into WhatsApp capture — drop entirely
     if (contact.whatsapp_capture === "disabled") return;
-
-    // Capture is off for this contact — do not read or buffer
-    // (Privacy control per spec §6.3)
     if (contact.wa_capture === "off") return;
 
-    // Buffer the message into the active thread
-    this.bufferMessage(msg, contact);
+    this.bufferMessage(msg.remoteJid, msg, contact, "whatsapp");
 
-    // Only set auto-capture timer if mode is "auto"
-    // "on_demand" contacts get buffered but no automatic trigger
     if (contact.wa_capture === "auto") {
       this.resetInactivityTimer(msg.remoteJid);
     }
   }
 
   /**
-   * Manually trigger capture for a contact's current thread.
-   * Used for on-demand capture (the "Save this conversation" button).
-   * Works regardless of wa_capture setting.
+   * Route messages from a non-WhatsApp channel (LinkedIn, Instagram).
+   * Called by POST /api/channels/incoming from the social daemons.
+   * Messages are immediately buffered and an inactivity timer is set
+   * (all social channel contacts are treated as "auto" capture).
+   */
+  handleChannelMessages(contactId: string, channel: Channel, messages: Message[]): boolean {
+    const contact = this.contacts.getById(contactId);
+    if (!contact) return false;
+
+    const captureField = channel === "linkedin" ? "linkedin_capture" : "instagram_capture";
+    if (contact[captureField] === "disabled") return false;
+
+    if (messages.length === 0) return true;
+
+    const key = `${channel}:${contactId}`;
+    for (const msg of messages) {
+      this.bufferMessage(key, msg, contact, channel);
+    }
+    this.resetInactivityTimer(key);
+    return true;
+  }
+
+  /**
+   * Manually trigger capture for a contact's current WhatsApp thread.
+   * Used for on-demand capture. Works regardless of wa_capture setting.
    */
   async triggerCapture(
     contactId: string,
@@ -71,34 +86,25 @@ export class MessageRouter {
     const contact = this.contacts.getById(contactId);
     if (!contact) return false;
 
-    const jid = this.contactToJid(contact);
-    const thread = this.threads.get(jid);
-
+    const key = this.whatsappKey(contact);
+    const thread = this.threads.get(key);
     if (!thread || thread.messages.length === 0) return false;
 
-    // Clear any pending auto timer
-    this.clearTimer(jid);
-
-    // Hand to capture pipeline
+    this.clearTimer(key);
     await this.capture.process(thread, opts);
-
-    // Clean up the buffered thread
-    this.threads.delete(jid);
-
+    this.threads.delete(key);
     return true;
   }
 
   /**
-   * Trigger capture for a single message (on-demand per-message capture).
-   * Creates a minimal thread containing just that message.
+   * Trigger capture for a single WhatsApp message (per-message on-demand capture).
    */
   async captureSingleMessage(contactId: string, messageId: string): Promise<boolean> {
     const contact = this.contacts.getById(contactId);
     if (!contact) return false;
 
-    const jid = this.contactToJid(contact);
-    const thread = this.threads.get(jid);
-
+    const key = this.whatsappKey(contact);
+    const thread = this.threads.get(key);
     if (!thread) return false;
 
     const message = thread.messages.find((m) => m.messageId === messageId);
@@ -109,6 +115,7 @@ export class MessageRouter {
       messages: [message],
       startedAt: message.timestamp,
       lastActivityAt: message.timestamp,
+      channel: "whatsapp",
     };
 
     await this.capture.process(singleThread);
@@ -136,59 +143,58 @@ export class MessageRouter {
 
   // ── Private helpers ──────────────────────────────────────
 
-  private bufferMessage(msg: WhatsAppMessage, contact: TrackedContact): void {
-    const existing = this.threads.get(msg.remoteJid);
-
+  private bufferMessage(key: string, msg: Message, contact: TrackedContact, channel: Channel): void {
+    const existing = this.threads.get(key);
     if (existing) {
       existing.messages.push(msg);
       existing.lastActivityAt = msg.timestamp;
     } else {
-      this.threads.set(msg.remoteJid, {
+      this.threads.set(key, {
         contact,
         messages: [msg],
         startedAt: msg.timestamp,
         lastActivityAt: msg.timestamp,
+        channel,
       });
     }
   }
 
-  private resetInactivityTimer(jid: string): void {
-    this.clearTimer(jid);
+  private resetInactivityTimer(key: string): void {
+    this.clearTimer(key);
 
     const timer = setTimeout(async () => {
-      this.timers.delete(jid);
+      this.timers.delete(key);
 
-      const thread = this.threads.get(jid);
+      const thread = this.threads.get(key);
       if (!thread || thread.messages.length === 0) return;
 
       console.log(
-        `⏱️  Inactivity timeout for ${thread.contact.name} — triggering capture (${thread.messages.length} messages)`
+        `⏱️  Inactivity timeout for ${thread.contact.name} (${thread.channel}) — triggering capture (${thread.messages.length} messages)`
       );
 
       try {
         await this.capture.process(thread);
       } catch (err) {
         console.error(`❌ Capture failed for ${thread.contact.name}:`, err);
-        // Thread stays buffered so the user can trigger manually
         return;
       }
 
-      // Clean up after successful capture
-      this.threads.delete(jid);
+      this.threads.delete(key);
     }, this.inactivityMs);
 
-    this.timers.set(jid, timer);
+    this.timers.set(key, timer);
   }
 
-  private clearTimer(jid: string): void {
-    const existing = this.timers.get(jid);
+  private clearTimer(key: string): void {
+    const existing = this.timers.get(key);
     if (existing) {
       clearTimeout(existing);
-      this.timers.delete(jid);
+      this.timers.delete(key);
     }
   }
 
-  private contactToJid(contact: TrackedContact): string {
-    return `${contact.whatsapp.replace(/^\+/, "")}@s.whatsapp.net`;
+  private whatsappKey(contact: TrackedContact): string {
+    if (!contact.whatsapp) throw new Error(`Contact ${contact.name} has no WhatsApp number`);
+    return `${contact.whatsapp.replace(/^\+/, "").replace(/\s+/g, "")}@s.whatsapp.net`;
   }
 }

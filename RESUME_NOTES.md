@@ -20,9 +20,48 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 
 ---
 
-## Current status: Phase 11 complete
+## Current status: Phase 11 + post-ship fixes (partially uncommitted)
 
 **Total: 212 tests passing, 13 test files**
+
+---
+
+## Session 2026-05-02 — Live debug + /kit-add-contact
+
+### Proven in production
+- End-to-end ZIP-import flow validated with real Samir Patel chat (221 messages, confirmed to contact card)
+
+### Bug fixes found during live test (uncommitted — needs cleanup + commit next session)
+
+**Kit (`kit` repo):**
+- `gateway/src/services/import-ingestor.ts` — use `mode=full` not `since_last_review` (historical ZIP messages predate the live-capture watermark; since_last_review filters them all out)
+- `gateway/src/services/message-router.ts` — `contactToJid()` was not stripping spaces from E.164 numbers (e.g. "+44 7956 289692" → JID had spaces, causing triggerCapture to look up wrong key and return false). Fix: add `.replace(/\s+/g, "")` to match ContactRegistry.e164ToJid.
+- Both files have `📥` debug logs to remove before commit.
+
+**Daemon (`claude_whatsapp_integration` repo):**
+- `src/services/whatsapp.ts` — `messages.upsert` type gate only allowed `type=notify`; self-sent messages arrive as `type=append` (multi-device sync). Fix: allow both. Has `🔔` debug log to remove.
+- `src/services/phone-export-importer.ts` — parser only handled iOS format `[DD/MM/YYYY, HH:MM:SS]`; Android exports use `DD/MM/YY, HH:MM - ` with no brackets. Fix: dual-regex, UK/US date-order fallback, NaN-timestamp rejection. Has `📄` debug log to remove.
+- `src/services/read.ts` — transcript read crashes on stored NaN-timestamp messages from failed imports. Fix: defensive filter.
+- `src/index.ts` — verbose `📦` onImport logging added; keep the useful lines, remove the noisy ones.
+
+### New slash command (uncommitted)
+- `.claude/commands/kit-add-contact.md` — new slash command
+- `gateway/src/mcp/tools.ts` — `CreateContactInput` + `buildMarkdown` + DB upsert extended with `whatsapp_capture`, `wa_capture` fields
+- `gateway/src/mcp/server.ts` — MCP `create-contact` tool schema + dispatch extended
+- **Note:** `createContact` in tools.ts runs in the MCP server process, not the REST gateway. The slash command falls back to writing markdown directly; SyncService handles DB sync.
+
+### 4 new contacts added (markdown written, Supabase sync pending)
+- `People/2 - Active/Say Keat Ooi.md` — tier 2, monthly, +65 9182 8173, capture enabled
+- `People/2 - Active/Teng Chew Ooi.md` — tier 2, monthly, +60 124738633, capture enabled (Say Keat's dad / Uncle Ooi)
+- `People/1 - Inner Circle/Peter Tan.md` — tier 1, fortnightly, +64 210 568 555, capture enabled (uncle, dad's youngest brother)
+- `People/1 - Inner Circle/Kat Osman.md` — tier 1, weekly, +44 7931 460 181, capture enabled (cousin)
+
+### Next session checklist
+1. Remove debug logs (`🔔`, `📄`, `📥`) from whatsapp.ts, phone-export-importer.ts, import-ingestor.ts, index.ts
+2. Commit kit fixes: `fix: Phase 11 production fixes — mode=full, contactToJid normalisation, add-contact command`
+3. Commit daemon fixes: `fix: WhatsApp ZIP ingestion — append-type gate, Android export parser, defensive read filter`
+4. Verify 4 new contacts synced to Supabase (refresh gateway or restart)
+5. Consider adding a REST endpoint wrapper around `createContact` so the slash command can call it directly instead of writing markdown
 
 ### Deliverables shipped
 

@@ -4,12 +4,12 @@ export type RelationshipTier = "1-Inner Circle" | "2-Active" | "3-Business Conta
 export type ContactFrequency = "Weekly" | "Monthly" | "Quarterly";
 export type BatteryCost = "Low" | "Medium" | "High";
 export type CaptureMode = "auto" | "on_demand" | "off";
-export type Channel = "whatsapp" | "call" | "in-person" | "email" | "other";
+export type Channel = "whatsapp" | "linkedin" | "instagram" | "call" | "in-person" | "email" | "other";
 export type Sentiment = "positive" | "neutral" | "draining";
 
 /**
  * A tracked contact — the gateway only needs fields relevant to
- * WhatsApp monitoring. The full contact record lives in Supabase.
+ * message monitoring. The full contact record lives in Supabase.
  */
 export interface TrackedContact {
   id: string;
@@ -20,31 +20,36 @@ export interface TrackedContact {
   frequency: ContactFrequency;
   frequency_days: number; // 7 | 30 | 90 — used to compute next_action
   last_contact: string; // ISO date
-  whatsapp_capture: "enabled" | "disabled"; // opt-in flag per contact
+  whatsapp_capture: "enabled" | "disabled";
+  linkedin_username: string | null;
+  linkedin_capture: "enabled" | "disabled";
+  instagram_username: string | null;
+  instagram_capture: "enabled" | "disabled";
 }
 
 // ── Message types ──────────────────────────────────────────
 
-export interface WhatsAppMessage {
-  /** JID of the remote party (e.g. "447700900123@s.whatsapp.net") */
-  remoteJid: string;
-  /** Whether we sent it (true) or received it (false) */
+/** Channel-agnostic message — used by LinkedIn, Instagram, and sweep threads */
+export interface Message {
   fromMe: boolean;
-  /** Plain text body — media messages are ignored in v1.1 */
   body: string;
-  /** Unix epoch ms */
-  timestamp: number;
-  /** WhatsApp message ID */
+  timestamp: number; // Unix epoch ms
   messageId: string;
+}
+
+/** WhatsApp-specific message — extends Message with JID for registry lookup */
+export interface WhatsAppMessage extends Message {
+  remoteJid: string;
 }
 
 // ── Conversation thread (assembled for capture) ────────────
 
 export interface ConversationThread {
   contact: TrackedContact;
-  messages: WhatsAppMessage[];
+  messages: Message[];
   startedAt: number; // epoch ms of first message
   lastActivityAt: number; // epoch ms of most recent message
+  channel: Channel;
 }
 
 // ── Capture result (from Claude summarisation) ─────────────

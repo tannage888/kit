@@ -16,8 +16,9 @@ import { MessageRouter } from "../services/message-router.js";
 import { CapturePipeline } from "../services/capture.js";
 import { SweepScheduler } from "../services/sweep-scheduler.js";
 import { ImportIngestor } from "../services/import-ingestor.js";
+import { ContactCreator, type CreateContactInput } from "../services/contact-creator.js";
 import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
-import type { CaptureMode, GatewayStatus, TrackedContact } from "../types.js";
+import type { CaptureMode, Channel, GatewayStatus, TrackedContact } from "../types.js";
 
 export function createApiRouter(
   contacts: ContactRegistry,
@@ -28,6 +29,7 @@ export function createApiRouter(
   startedAt: number
 ): Router {
   const api = Router();
+  const creator = new ContactCreator(contacts);
 
   // ── Health / status ──────────────────────────────────────
 
@@ -102,6 +104,39 @@ export function createApiRouter(
     res.json({ ok: true, count });
   });
 
+  // Create a new contact: writes markdown, upserts Supabase, registers in
+  // live ContactRegistry — all in one request so the contact is immediately
+  // usable without a gateway restart or waiting for chokidar to fire.
+  const createContactSchema = z.object({
+    name: z.string().min(1),
+    tier: z.number().int().min(1).max(3),
+    frequency: z.string().min(1),
+    whatsapp: z.string().optional(),
+    whatsapp_capture: z.enum(["enabled", "disabled"]).optional(),
+    wa_capture: z.enum(["auto", "on_demand", "off"]).optional(),
+    origin_story: z.string().optional(),
+    notes: z.string().optional(),
+    social_battery_cost: z.string().optional(),
+  });
+
+  api.post("/contacts/create", async (req: Request, res: Response) => {
+    const parsed = createContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", details: parsed.error.issues });
+      return;
+    }
+    try {
+      const result = await creator.create(parsed.data as CreateContactInput);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      if (err.message?.includes("already exists")) {
+        res.status(409).json({ error: "already_exists", detail: err.message });
+      } else {
+        res.status(500).json({ error: "create_failed", detail: err.message });
+      }
+    }
+  });
+
   // Name → JID resolver. Used by the WhatsApp daemon's NameResolver hook
   // when a ZIP-export filename can't be matched against the daemon's own
   // chats table — Kit's contact registry is the second-chance lookup.
@@ -119,6 +154,39 @@ export function createApiRouter(
       return;
     }
     res.json({ jid: contacts.jidFor(contact), contactId: contact.id });
+  });
+
+  // ── Social channel incoming messages (from LinkedIn/Instagram daemons) ──
+  // Daemons call this endpoint with scraped messages for a tracked contact.
+  // Messages are routed through the same inactivity-timer capture pipeline
+  // as WhatsApp, but keyed by "{channel}:{contactId}" instead of JID.
+
+  const channelIncomingSchema = z.object({
+    contactId: z.string().uuid(),
+    channel: z.enum(["linkedin", "instagram"]),
+    messages: z.array(
+      z.object({
+        fromMe: z.boolean(),
+        body: z.string(),
+        timestamp: z.number(),
+        messageId: z.string(),
+      })
+    ).min(1),
+  });
+
+  api.post("/channels/incoming", (req: Request, res: Response) => {
+    const parsed = channelIncomingSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", details: parsed.error.issues });
+      return;
+    }
+    const { contactId, channel, messages } = parsed.data;
+    const ok = router.handleChannelMessages(contactId, channel as Channel, messages);
+    if (!ok) {
+      res.status(404).json({ error: "contact_not_found_or_capture_disabled" });
+      return;
+    }
+    res.json({ ok: true, buffered: messages.length });
   });
 
   // ── ZIP import completion (from the WhatsApp daemon) ─────

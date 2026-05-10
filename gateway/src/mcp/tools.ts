@@ -447,6 +447,8 @@ export interface CreateContactInput {
   notes?: string;
   social_battery_cost?: string;
   whatsapp?: string;
+  whatsapp_capture?: "enabled" | "disabled";
+  wa_capture?: "auto" | "on_demand" | "off";
 }
 
 function buildMarkdown(input: CreateContactInput): string {
@@ -455,13 +457,22 @@ function buildMarkdown(input: CreateContactInput): string {
   const bg = input.origin_story ?? "<!-- Add background here -->";
   const notes = input.notes ?? "<!-- Add notes here -->";
 
+  // Optional frontmatter fields — only emit when provided so we don't pollute
+  // the file with empty keys.
+  const optional: string[] = [];
+  if (input.whatsapp) optional.push(`whatsapp: "${input.whatsapp}"`);
+  if (input.social_battery_cost) optional.push(`social_battery: ${input.social_battery_cost}`);
+  if (input.whatsapp_capture) optional.push(`whatsapp_capture: ${input.whatsapp_capture}`);
+  if (input.wa_capture) optional.push(`wa_capture: ${input.wa_capture}`);
+  const optionalBlock = optional.length ? optional.join("\n") + "\n" : "";
+
   return `---
 name: ${input.name}
 relationship: ${rel}
 frequency: ${input.frequency}
 last_contact:
 next_action:
-tags: [people, ${tag}]
+${optionalBlock}tags: [people, ${tag}]
 ---
 
 # ${input.name}
@@ -488,44 +499,28 @@ ${notes}
 }
 
 export async function createContact(input: CreateContactInput): Promise<string> {
-  const id = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  // Delegate to the gateway REST API so the contact is immediately registered
+  // in the live ContactRegistry (no restart or chokidar-trigger needed).
+  const port = Number(process.env.PORT ?? 3141);
+  const url = `http://localhost:${port}/api/contacts/create`;
 
-  // Check for duplicates
-  const { data: existing } = await kitClient().from("contacts").select("id").eq("id", id).single();
-  if (existing) return `Contact "${input.name}" already exists (id: ${id}).`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    return `Could not reach the Kit gateway at ${url}. Is it running?\nError: ${(err as Error).message}`;
+  }
 
-  const frequencyDays: Record<string, number> = {
-    weekly: 7, fortnightly: 14, "bi-weekly": 14, monthly: 30,
-    "bi-monthly": 60, quarterly: 90, "twice yearly": 180,
-    "bi-annual": 180, annual: 365, yearly: 365,
-  };
-  const frequency_days = frequencyDays[input.frequency.toLowerCase()] ?? 30;
+  const body = (await response.json()) as any;
 
-  // Write markdown file
-  const folder = path.join(PEOPLE_DIR, TIER_FOLDER[input.tier]);
-  if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
-  const filePath = path.join(folder, `${input.name}.md`);
-  fs.writeFileSync(filePath, buildMarkdown(input), "utf-8");
+  if (response.status === 409) return `Contact "${input.name}" already exists.`;
+  if (!response.ok) return `Failed to create contact: ${body?.detail ?? response.statusText}`;
 
-  // Upsert to Supabase
-  const { error } = await kitClient().from("contacts").upsert({
-    id,
-    name: input.name,
-    tier: input.tier,
-    frequency: input.frequency,
-    frequency_days,
-    last_contact: null,
-    next_action: null,
-    social_battery_cost: input.social_battery_cost ?? null,
-    origin_story: input.origin_story ?? null,
-    notes: input.notes ?? null,
-    whatsapp: input.whatsapp ?? null,
-    active: true,
-    wa_capture: "on_demand",
-  });
-  if (error) throw new Error(`DB upsert failed: ${error.message}`);
-
-  // Capture to Open Brain
+  // Capture to Open Brain now that the contact row is confirmed in Supabase.
   const entity = toCanonicalName(input.name);
   const parts = [`New contact created: ${input.name} (Tier ${input.tier}, ${input.frequency}).`];
   if (input.origin_story) parts.push(input.origin_story);
@@ -539,7 +534,8 @@ export async function createContact(input: CreateContactInput): Promise<string> 
     source: "kit-mcp",
   });
 
-  return `Created contact "${input.name}" (${id}). Markdown written to People/${TIER_FOLDER[input.tier]}/${input.name}.md. DB row inserted. Open Brain observation captured.`;
+  const tier_folder = ({ 1: "1 - Inner Circle", 2: "2 - Active", 3: "3 - Business Contact" } as const)[input.tier];
+  return `Created contact "${input.name}" (${body.id}). Markdown written to People/${tier_folder}/${input.name}.md. DB row inserted. Contact immediately active in Kit.`;
 }
 
 // ── Tool: kit-prep-card ───────────────────────────────────────────────────────

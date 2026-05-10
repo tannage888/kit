@@ -30,6 +30,10 @@ export interface ContactRow {
   whatsapp_capture: "enabled" | "disabled";
   notes: string | null;
   whatsapp: string | null;
+  linkedin_username: string | null;
+  linkedin_capture: "enabled" | "disabled";
+  instagram_username: string | null;
+  instagram_capture: "enabled" | "disabled";
   active: boolean;
 }
 
@@ -194,6 +198,10 @@ export function parseContactFile(
   const birthday = fm.birthday ? String(fm.birthday) : null;
   const whatsapp_capture: "enabled" | "disabled" =
     fm.whatsapp_capture === "enabled" ? "enabled" : "disabled";
+  const linkedin_capture: "enabled" | "disabled" =
+    fm.linkedin_capture === "enabled" ? "enabled" : "disabled";
+  const instagram_capture: "enabled" | "disabled" =
+    fm.instagram_capture === "enabled" ? "enabled" : "disabled";
 
   const notesSection = extractSection(content, "Notes", "Family");
 
@@ -215,6 +223,10 @@ export function parseContactFile(
       whatsapp_capture,
       notes: notesSection ?? null,
       whatsapp: (fm.whatsapp ? String(fm.whatsapp) : null) ?? extractPhone(content),
+      linkedin_username: fm.linkedin_username ? String(fm.linkedin_username) : null,
+      linkedin_capture,
+      instagram_username: fm.instagram_username ? String(fm.instagram_username) : null,
+      instagram_capture,
       active: true,
     },
     followUps: parseFollowUps(content, id),

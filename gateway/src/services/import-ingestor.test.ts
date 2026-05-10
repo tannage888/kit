@@ -16,6 +16,10 @@ function makeContact(overrides: Partial<TrackedContact> = {}): TrackedContact {
     frequency_days: 30,
     last_contact: "2026-03-01",
     whatsapp_capture: "enabled",
+    linkedin_username: null,
+    linkedin_capture: "disabled",
+    instagram_username: null,
+    instagram_capture: "disabled",
     ...overrides,
   };
 }
