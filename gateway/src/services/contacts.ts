@@ -172,6 +172,66 @@ export class ContactRegistry {
     );
   }
 
+  /**
+   * Update editable fields for a contact in Supabase and in-memory.
+   * Returns false if the contact is not found.
+   */
+  async updateContact(
+    contactId: string,
+    fields: Partial<Pick<TrackedContact,
+      | "name" | "tier" | "frequency" | "last_contact"
+      | "whatsapp" | "wa_capture" | "whatsapp_capture"
+      | "linkedin_username" | "linkedin_capture"
+      | "instagram_username" | "instagram_capture"
+    >>
+  ): Promise<boolean> {
+    const contact = this.byId.get(contactId);
+    if (!contact) return false;
+
+    const dbFields: Record<string, unknown> = {};
+    if (fields.name !== undefined) dbFields.name = fields.name;
+    if (fields.tier !== undefined) dbFields.tier = fields.tier;
+    if (fields.frequency !== undefined) {
+      dbFields.frequency = fields.frequency;
+      dbFields.frequency_days = frequencyToDays(fields.frequency);
+    }
+    if (fields.last_contact !== undefined) {
+      dbFields.last_contact = fields.last_contact || null;
+      const freqDays = (fields.frequency ? frequencyToDays(fields.frequency) : null) ?? contact.frequency_days;
+      dbFields.next_action = fields.last_contact ? calcNextAction(fields.last_contact, freqDays) : null;
+    }
+    if (fields.whatsapp !== undefined) dbFields.whatsapp = fields.whatsapp || null;
+    if (fields.wa_capture !== undefined) dbFields.wa_capture = fields.wa_capture;
+    if (fields.whatsapp_capture !== undefined) dbFields.whatsapp_capture = fields.whatsapp_capture;
+    if (fields.linkedin_username !== undefined) dbFields.linkedin_username = fields.linkedin_username;
+    if (fields.linkedin_capture !== undefined) dbFields.linkedin_capture = fields.linkedin_capture;
+    if (fields.instagram_username !== undefined) dbFields.instagram_username = fields.instagram_username;
+    if (fields.instagram_capture !== undefined) dbFields.instagram_capture = fields.instagram_capture;
+
+    const { error } = await this.supabase
+      .schema("kit")
+      .from("contacts")
+      .update(dbFields)
+      .eq("id", contactId);
+
+    if (error) throw error;
+
+    // Update in-memory registry
+    this.unregister(contactId);
+    const updated: TrackedContact = {
+      ...contact,
+      ...fields,
+      frequency_days: fields.frequency ? frequencyToDays(fields.frequency) : contact.frequency_days,
+    };
+    // unregister removes by old id — re-add with same id
+    this.byId.set(contactId, updated);
+    if (updated.whatsapp) this.byJid.set(this.e164ToJid(updated.whatsapp), updated);
+    if (updated.linkedin_username) this.byLinkedin.set(updated.linkedin_username.toLowerCase(), updated);
+    if (updated.instagram_username) this.byInstagram.set(updated.instagram_username.toLowerCase().replace(/^@/, ""), updated);
+
+    return true;
+  }
+
   /** All currently tracked contacts */
   getAll(): TrackedContact[] {
     return Array.from(this.byId.values());
