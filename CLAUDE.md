@@ -22,11 +22,23 @@ Kit gateway  ── REST ──►  claude_whatsapp_integration (dedicated insta
   └─► People/*.md (file watcher)
 ```
 
-- **Kit gateway** (`gateway/`) — Express server on `:3141`. REST client of the external WhatsApp daemon. Owns: contact registry, capture pipeline, markdown↔Supabase sync, sweep scheduler.
-- **Dedicated WhatsApp daemon** — a separate `claude_whatsapp_integration` instance (port `:3142`, `auth_state/kit/`). Runs alongside the gateway. Not part of this repo.
+- **Kit gateway** (`gateway/`) — Express server on `:3141`. Serves the React web UI from `web/dist/` at `/`, and the REST API at `/api`. REST client of the external WhatsApp daemon. Owns: contact registry, capture pipeline, markdown↔Supabase sync, sweep scheduler.
+- **Dedicated WhatsApp daemon** — a separate `claude_whatsapp_integration` instance at `C:\dev\claude_whatsapp_integration` (port `:3142`, `auth_state/kit/`). Runs alongside the gateway under pm2.
 - **Supabase** — `kit` schema holds `contacts`, `follow_ups`, `interaction_log`, `kit_meta`, `wa_sweep_state`, `energy_state`.
 - **Open Brain** — a separate Supabase instance. Kit writes to the `thoughts` table via `ContextBinder.capture()` only. Never `.from('thoughts')` directly.
 - **People/*.md** — source of truth for contact records. Gitignored (personal data). See `People.template/` for the schema.
+
+## Web UI (`web/`)
+
+Vite + React + TypeScript SPA. Built output (`web/dist/`) is served by the gateway at `http://localhost:3141`.
+
+```bash
+cd web
+npm run dev      # Vite dev server on :3143 (proxies /api to :3141)
+npm run build    # Build to web/dist/ — must run before deploying/restarting gateway
+```
+
+The `kit-web` pm2 entry has been removed — the gateway serves the built assets directly. Always run `npm run build` in `web/` before restarting the gateway in production.
 
 ## Commands (gateway)
 
