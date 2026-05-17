@@ -8,6 +8,9 @@
  * Added: POST /api/incoming-message (daemon push endpoint).
  */
 
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { config } from "../config.js";
@@ -18,7 +21,31 @@ import { SweepScheduler } from "../services/sweep-scheduler.js";
 import { ImportIngestor } from "../services/import-ingestor.js";
 import { ContactCreator, type CreateContactInput } from "../services/contact-creator.js";
 import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
+import { setFrontmatterField } from "../utils/markdown.js";
 import type { CaptureMode, Channel, GatewayStatus, TrackedContact } from "../types.js";
+import { EnergyService } from "../services/energy.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PEOPLE_DIR = path.resolve(__dirname, "..", "..", "..", "People");
+
+const TIER_DIRS = [
+  { dir: "1 - Inner Circle", tier: 1 },
+  { dir: "2 - Active", tier: 2 },
+  { dir: "3 - Business Contact", tier: 3 },
+];
+
+function findMarkdownFile(contactId: string): string | null {
+  for (const { dir } of TIER_DIRS) {
+    const tierPath = path.join(PEOPLE_DIR, dir);
+    if (!fs.existsSync(tierPath)) continue;
+    for (const file of fs.readdirSync(tierPath).filter((f) => f.endsWith(".md"))) {
+      const slug = file.replace(/\.md$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+      if (slug === contactId) return path.join(tierPath, file);
+    }
+  }
+  return null;
+}
 
 export function createApiRouter(
   contacts: ContactRegistry,
@@ -240,6 +267,53 @@ export function createApiRouter(
     res.json({ ok: removed });
   });
 
+  const updateContactSchema = z.object({
+    tier: z.number().int().min(1).max(3).optional(),
+    frequency: z.string().min(1).optional(),
+    whatsapp: z.string().optional(),
+    whatsapp_capture: z.enum(["enabled", "disabled"]).optional(),
+    wa_capture: z.enum(["auto", "on_demand", "off"]).optional(),
+    last_contact: z.string().optional(),
+    notes: z.string().optional(),
+    social_battery_cost: z.string().optional(),
+    linkedin_username: z.string().optional(),
+    linkedin_capture: z.enum(["enabled", "disabled"]).optional(),
+    instagram_username: z.string().optional(),
+    instagram_capture: z.enum(["enabled", "disabled"]).optional(),
+    whatsapp_groups: z.string().optional(),
+  });
+
+  api.put("/contacts/:id", async (req: Request, res: Response) => {
+    const id = req.params["id"] as string;
+    const contact = contacts.getById(id);
+    if (!contact) {
+      res.status(404).json({ error: "contact_not_found" });
+      return;
+    }
+    const parsed = updateContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", details: parsed.error.issues });
+      return;
+    }
+    const fields = parsed.data;
+
+    const filePath = findMarkdownFile(id);
+    if (filePath) {
+      let raw = fs.readFileSync(filePath, "utf-8");
+      for (const [key, value] of Object.entries(fields)) {
+        if (value !== undefined) {
+          raw = setFrontmatterField(raw, key, String(value));
+        }
+      }
+      fs.writeFileSync(filePath, raw, "utf-8");
+    }
+
+    Object.assign(contact, fields);
+    if (fields.wa_capture) contacts.setCaptureMode(id, fields.wa_capture as CaptureMode);
+
+    res.json({ ok: true, filePath: filePath ?? null });
+  });
+
   // ── Capture mode ─────────────────────────────────────────
 
   const captureModeSchema = z.object({
@@ -343,6 +417,43 @@ export function createApiRouter(
       lastResult: sweep.getLastResult(),
       nextSweepAt: sweep.getNextSweepAt()?.toISOString() ?? null,
     });
+  });
+
+  // ── Energy state ─────────────────────────────────────────
+
+  const energy = new EnergyService();
+
+  api.get("/energy", async (_req: Request, res: Response) => {
+    const level = await energy.getEnergyForToday();
+    res.json({ level, day: new Date().toISOString().slice(0, 10) });
+  });
+
+  const energySetSchema = z.object({ level: z.enum(["high", "medium", "low"]) });
+
+  api.post("/energy", async (req: Request, res: Response) => {
+    const parsed = energySetSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", details: parsed.error.issues });
+      return;
+    }
+    try {
+      await energy.setEnergy(parsed.data.level);
+      res.json({ ok: true, level: parsed.data.level });
+    } catch (err: any) {
+      res.status(500).json({ error: "energy_save_failed", detail: err.message });
+    }
+  });
+
+  // ── Groups (proxy to daemon) ─────────────────────────────
+
+  api.get("/groups", async (_req: Request, res: Response) => {
+    try {
+      const response = await fetch(`${config.EXTERNAL_GATEWAY_URL}/api/groups`);
+      const data = await response.json();
+      res.status(response.status).json(data);
+    } catch (err: any) {
+      res.status(502).json({ error: "daemon_unavailable", detail: err.message });
+    }
   });
 
   return api;

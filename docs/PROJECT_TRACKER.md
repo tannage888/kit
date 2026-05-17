@@ -1,69 +1,59 @@
 ---
 project: kit
-display_name: Kit
-owner: mark
+display_name: "Kit — Relationship Manager"
+owner: seang
 status: active
-priority: 3
-created: 2026-05-04
-last_reviewed: 2026-05-04
-permissions: acceptEdits
+priority: 2
+created: 2026-04-01
+last_reviewed: 2026-05-16
+
+permissions: bypassPermissions
 max_concurrent_agents: 1
 shared_resources:
   - whatsapp_daemon
   - port_3141
   - port_3142
 
-current_stage: cleanup_phase11
+current_stage: done
+
+daemon_pin:
+  repo: C:\dev\claude_whatsapp_integration
+  commit: b503624ce7cf5af75974c584047a369ee04d9ac0
+  message: "feat: add GET /api/groups endpoint"
+  verified: 2026-05-16
+  endpoints_consumed:
+    - GET /api/status
+    - GET /api/groups
+    - GET /api/chats/:jid/messages
+    - POST /api/chats/:jid/ack
 
 stages:
-  cleanup_phase11:
+  commit-and-verify:
     model: sonnet
     loop: single
     prompt: |
-      Phase 11 (ZIP transcript ingestion) shipped 2026-05-02 but two production
-      fixes are uncommitted, with debug 📥 console.log statements still in the
-      code. Three new untracked files also need committing.
+      The gateway-api-expansion and web UI stages (web-scaffold through web-prod) completed
+      but left changes uncommitted. Review and commit all staged work in C:\dev\kit.
 
-      Read RESUME_NOTES.md §"Bug fixes found during live test" first for the
-      context behind each fix.
+      Changed files (from git status):
+      - gateway/src/routes/api.ts — CORS + GET /api/contacts + PUT /api/contacts/:id + GET /api/groups proxy
+      - gateway/src/index.ts — static serving of web/dist/
+      - gateway/src/services/contacts.ts — contact update logic
+      - pm2.config.cjs — pm2 entries
+      - web/ — new Vite+React SPA (untracked)
 
-      Job:
-      1. Read gateway/src/services/import-ingestor.ts and
-         gateway/src/services/message-router.ts. Remove only the console.log /
-         console.warn lines that contain the 📥 emoji. Do not touch any other
-         code.
-      2. Run `cd gateway && npm test`. It must remain at 212 passing tests
-         across 13 files. If anything goes red, the log was load-bearing — stop
-         and escalate.
-      3. Run `npx tsc --noEmit` from gateway/. Must be clean (existing 6
-         pre-existing errors in e2e.test.ts are acceptable; no NEW errors).
-      4. Commit in two logical chunks:
-         - `fix: strip Phase 11 debug logs from import-ingestor and message-router`
-           (the two modified files)
-         - `feat: kit-add-contact and kit-sweep slash commands`
-           (gateway/src/services/contact-creator.ts,
-            .claude/commands/kit-add-contact.md,
-            .claude/commands/kit-sweep.md)
-      5. Do NOT commit:
-         - People/ contents (gitignored — personal data)
-         - RESUME_NOTES.md (working scratchpad)
-         - docs/PROJECT_TRACKER.md (this file)
-         - .claude/settings.json (local settings)
-         - daemon-side files (different repo)
-      6. Confirm `git status --porcelain` shows no remaining entries for the
-         two fixed files.
-
-      Use HEREDOC for commit messages. Do not push.
+      Steps:
+      1. Run npm test in C:\dev\kit\gateway — must exit 0 before committing.
+      2. Run npm run build in C:\dev\kit\web — must exit 0 before committing.
+      3. Commit gateway changes: "feat: gateway-api-expansion — CORS, PUT contacts, groups proxy"
+      4. Commit web changes: "feat: web UI scaffold and implementation (Vite+React)"
+      5. If tests fail, fix them before committing.
     success_criteria: |
-      `cd gateway && npm test` exits 0 AND
-      `grep -l '📥' gateway/src/services/import-ingestor.ts gateway/src/services/message-router.ts`
-      returns no matches AND
-      `git status --porcelain gateway/src/services/import-ingestor.ts gateway/src/services/message-router.ts`
-      is empty
+      git -C C:\dev\kit status --short shows no uncommitted changes.
+      npm test in C:\dev\kit\gateway exits 0.
+      npm run build in C:\dev\kit\web exits 0.
     needs_human_for:
-      - any test going red after log removal
-      - merge conflicts or unexpected git state
-      - new untracked files appearing that aren't in the known list
+      - test failures that require design decisions
 
   verify_contact_sync:
     model: haiku
@@ -80,9 +70,9 @@ stages:
       - kat_osman      (People/1 - Inner Circle/Kat Osman.md)
 
       Method:
-      1. Confirm Kit gateway is up: `curl -fs http://127.0.0.1:3141/api/status`.
+      1. Confirm Kit gateway is up: curl -fs http://127.0.0.1:3141/api/status
          If not, stop and escalate.
-      2. Fetch contacts list: `curl -fs http://127.0.0.1:3141/api/contacts`.
+      2. Fetch contacts list: curl -fs http://127.0.0.1:3141/api/contacts
       3. Verify all 4 IDs appear in the response.
       4. If any are missing: do NOT manually insert them. Escalate — most
          likely the chokidar watcher missed the create, or frontmatter is
@@ -90,109 +80,191 @@ stages:
 
       No code modifications under any circumstances.
     success_criteria: |
-      `curl -fs http://127.0.0.1:3141/api/contacts | grep -oE '(say_keat_ooi|teng_chew_ooi|peter_tan|kat_osman)' | sort -u | wc -l`
+      curl -fs http://127.0.0.1:3141/api/contacts | grep -oE '(say_keat_ooi|teng_chew_ooi|peter_tan|kat_osman)' | sort -u | wc -l
       returns 4
     needs_human_for:
       - gateway not running on 127.0.0.1:3141
       - any of the 4 contact IDs missing from the response
 
+  daemon-groups-endpoint:
+    model: sonnet
+    loop: single
+    prompt: |
+      Add a GET /api/groups endpoint to the WhatsApp daemon at C:\dev\claude_whatsapp_integration.
+      The endpoint should call Baileys' sock.groupFetchAllParticipating() and return an array of:
+        [{ jid: string, name: string, participants: string[] }]
+      where participants are phone numbers in international format (e.g. "+447700900123").
+      Add the route in src/ following the existing routing pattern. Add a test. Run npm test.
+    success_criteria: |
+      npm test in C:\dev\claude_whatsapp_integration exits 0.
+      A GET /api/groups route exists in the daemon source.
+    needs_human_for:
+      - baileys_api_breaking_changes
+
+  gateway-api-expansion:
+    model: sonnet
+    loop: ralph
+    max_iterations: 6
+    prompt: |
+      Expand the Kit gateway at C:\dev\kit\gateway with:
+      1. CORS middleware allowing http://localhost:3143
+      2. GET /api/contacts — list all contacts from the registry
+      3. PUT /api/contacts/:id — update contact fields and write back to the markdown file
+      4. GET /api/groups — proxy to daemon GET http://localhost:3142/api/groups
+      Follow existing patterns in gateway/src/routes/api.ts. Run npm test after each change.
+    success_criteria: |
+      npm test in C:\dev\kit\gateway exits 0.
+      All four additions exist in gateway/src/routes/api.ts.
+    needs_human_for:
+      - schema_changes
+
+  web-scaffold:
+    model: sonnet
+    loop: single
+    prompt: |
+      Scaffold a Vite + React + TypeScript SPA at C:\dev\kit\web.
+      - Run: npm create vite@latest web -- --template react-ts (inside C:\dev\kit)
+      - Add a gateway API client at web/src/api/client.ts pointing to http://localhost:3141
+      - Add react-router-dom. Create placeholder pages: Dashboard, Contacts, Groups, Captures, Sweep.
+      - Add a nav sidebar linking all pages.
+      - Configure vite.config.ts to proxy /api to http://localhost:3141 in dev.
+      - Add kit-web entry to C:\dev\kit\pm2.config.cjs: runs `npm run preview` on port 3143.
+      Run npm run build to verify it compiles.
+    success_criteria: |
+      C:\dev\kit\web exists with a working Vite+React app.
+      npm run build in C:\dev\kit\web exits 0.
+    needs_human_for: []
+
+  web-contacts:
+    model: sonnet
+    loop: ralph
+    max_iterations: 8
+    prompt: |
+      Implement the Contacts section of the Kit web UI at C:\dev\kit\web.
+      - Contacts list: fetch GET /api/contacts, display name, tier, last_contact, next_action.
+      - Contact detail: all fields editable via form, save via PUT /api/contacts/:id.
+      - Group assignment: fetch GET /api/groups, show multi-select, save to whatsapp_groups field.
+      Run npm run build to verify after each major change.
+    success_criteria: |
+      npm run build in C:\dev\kit\web exits 0.
+      Contacts list and detail pages exist and call the gateway API.
+    needs_human_for:
+      - ux_design_decisions
+
+  web-dashboard:
+    model: sonnet
+    loop: ralph
+    max_iterations: 6
+    prompt: |
+      Implement the Dashboard and Captures pages of the Kit web UI at C:\dev\kit\web.
+      - Dashboard: energy state widget (GET/POST /api/energy), today's contacts list.
+      - Captures page: fetch pending captures, show approve/dismiss buttons.
+      Run npm run build to verify.
+    success_criteria: |
+      npm run build exits 0. Dashboard and Captures pages are functional.
+    needs_human_for: []
+
+  web-sweep:
+    model: sonnet
+    loop: single
+    prompt: |
+      Implement the Sweep page of the Kit web UI at C:\dev\kit\web.
+      - Trigger sweep button (POST /api/sweep).
+      - Show last sweep result: contacts swept, threads processed, per-contact breakdown.
+      - Auto-refresh status while sweep is in progress.
+      Run npm run build to verify.
+    success_criteria: |
+      npm run build exits 0. Sweep page triggers the gateway sweep endpoint.
+    needs_human_for: []
+
+  web-prod:
+    model: sonnet
+    loop: single
+    prompt: |
+      Wire the Kit web UI into production.
+      - In gateway/src/index.ts, serve web/dist/ statically at /.
+      - Update pm2.config.cjs to remove the separate kit-web entry (now served by gateway).
+      - Update CLAUDE.md to document the web UI and its build step (npm run build in web/).
+      Verify http://localhost:3141 serves the React app. Gateway tests must still pass.
+    success_criteria: |
+      http://localhost:3141 serves the React app.
+      npm test in C:\dev\kit\gateway exits 0.
+    needs_human_for: []
+
 next_actions: []
 blockers: []
+human_tasks:
+  - id: instagram_auth
+    what: "Run `npm run login` in C:\\dev\\kit\\daemons\\instagram to create auth_state.json. Daemon will crash-loop until this is done."
+    done: true
+  - id: linkedin_auth
+    what: "Verify LinkedIn daemon auth — check C:\\dev\\kit\\daemons\\linkedin has a valid session. Run `npm run login` if not."
+    done: true
+  - id: pm2_save
+    what: "Run `pm2 save` from C:\\dev\\kit after all daemons are in their desired state (instagram/linkedin stopped or authed) to persist the process list for startup resurrection."
+    done: true
+  - id: verify_contact_sync_rerun
+    what: "verify_contact_sync stage failed during migration (gateway was down). Gateway is now up — Orchestra should re-dispatch this stage automatically. If it fails again, check the People/ markdown files for the 4 contacts."
+    done: true
+  - id: whatsapp_groups_pr_merged
+    what: "Merge the GET /api/groups PR from claude_whatsapp_integration before gateway-api-expansion dispatches — the gateway proxies to that endpoint."
+    done: true
 last_dispatch:
-  stage: null
-  agent_id: null
-  started_at: null
-  completed_at: null
-  outcome: null
-history: []
+  task_id: "kit-d4814689"
+  stage: "daemon-groups-endpoint"
+  model: "sonnet"
+  loop: "single"
+  started: "2026-05-16T11:52:37"
+  ended: "2026-05-16T11:53:08"
+  result: "done"
+  iterations_used: 1
+  tokens: { input: 0, output: 0, cost_usd: 0 }
+  note: "Endpoint already present in daemon (shipped 2026-05-11). Verified manually 2026-05-16: GET /api/groups in src/routes/api.ts, 164 tests pass including groups.test.ts (4 tests). Stage closed."
+history:
+  - stage: daemon-groups-endpoint
+    result: skipped
+    ended: 2026-05-16
+    note: "GET /api/groups already shipped in claude_whatsapp_integration commit b503624 (2026-05-11). Stage was mis-scoped to C:\\dev\\kit; agent correctly refused. Work done; advanced directly to commit-and-verify."
+  - stage: cleanup_phase11
+    result: done
+    ended: 2026-05-10
+    note: "Debug logs stripped, Phase 11 fixes committed. Repo moved to C:\\dev\\kit."
 ---
 
-# Kit — Project Tracker
+# Kit — Relationship Manager
 
-## What this project is
+Kit is a conversational-first relationship management tool for neurodivergent users. It syncs WhatsApp conversations, maintains contact notes in markdown, and exposes tools via Claude Code slash commands and (in progress) a web UI.
 
-Kit is a conversational-only relationship-management tool for neurodivergent
-(autism / ADHD) users. All interaction happens through Claude Code slash
-commands (`/kit-*`) calling the Kit gateway. No mobile app in v1.0.
+## Current focus
 
-Full context: [consolidated-plan.md](consolidated-plan.md). Original spec:
-[kit_specification.md](kit_specification.md).
+Building a web UI (Vite + React) served from the Kit gateway, to allow contact management and group JID assignment without hand-editing markdown files.
 
-## Headline status (2026-05-04)
+## Architecture
 
-- **All 11 phases complete.** `KIT_V1_COMPLETE` was emitted 2026-05-02.
-- **212 tests passing** across 13 test files in `gateway/`.
-- **Phase 11 (ZIP transcript ingestion) shipped and validated in production**
-  with a real 221-message Samir Patel chat.
-- **Production fixes from that live test are uncommitted** and carry debug
-  logs that need stripping — this is the active stage.
+```
+Claude Code slash commands  +  Web UI (:3143)
+              │                      │
+              └──────────┬───────────┘
+                         ▼
+              Kit gateway (:3141)
+                         │
+            ┌────────────┼──────────────┐
+            ▼            ▼              ▼
+     Supabase       Open Brain    WhatsApp daemon
+     (kit schema)  (ContextBinder)  (:3142, Baileys)
+                                        │
+                                    WhatsApp
+```
 
-## Stage rationale
+- Gateway: `C:\dev\kit\gateway`
+- WhatsApp daemon: `C:\dev\claude_whatsapp_integration`
+- Both managed by pm2 (`C:\dev\kit\pm2.config.cjs`)
+- `People/*.md` — gitignored contact markdown files (source of truth)
 
-**`cleanup_phase11` (current_stage)** — concrete mechanical work with a clear
-finish line. Strip 📥 debug logs from two files, verify tests stay green,
-commit two logical chunks. Sonnet because it needs to read each line and
-distinguish debug logs from functional logging without breaking anything.
+## Conventions (must follow)
 
-**`verify_contact_sync`** — pure verification. Haiku is enough: hit one
-endpoint, grep for 4 IDs. The interesting work happens only on failure, which
-is escalated rather than auto-resolved.
-
-After both stages clear, the project sits at a clean v1.0 checkpoint. Future
-work (v1.1 portable MCP prompts, REST wrapper for `createContact`, daemon-side
-incoming-message hook) requires design discussion before being turned into
-agent stages — see §"Future work needing design".
-
-## Shared resources
-
-- **`whatsapp_daemon`** — the dedicated `claude_whatsapp_integration` process
-  on port 3142, with `auth_state/kit/`. Only one consumer at a time.
-- **`port_3141`** — Kit gateway. Only one instance can listen.
-- **`port_3142`** — WhatsApp daemon. Only one instance can listen.
-
-Locking matters because two agents simultaneously running `npm run dev` would
-collide on port 3141, and a sweep firing while another agent restarts the
-daemon would skip with `whatsapp_disconnected`.
-
-## Future work needing design (do NOT auto-dispatch)
-
-These need a human conversation before becoming stages with concrete success
-criteria:
-
-- **MCP prompts migration (v1.1)** — port the 10 `.claude/commands/kit-*.md`
-  files to MCP prompts in `gateway/src/mcp/server.ts` so Kit works in Claude
-  Desktop. Open questions: keep both surfaces or drop the command files,
-  prompt-vs-tool naming convention, distribution as npm package.
-  TODO(mark): decide before queueing as a stage.
-
-- **REST wrapper for `createContact`** — currently the MCP `create-contact`
-  tool runs in the MCP server process, so the `/kit-add-contact` slash
-  command falls back to writing markdown directly and lets SyncService
-  upsert. A REST endpoint wrapper would let the slash command call straight
-  through. Small but worth confirming the approach.
-  TODO(mark): confirm desired behaviour.
-
-- **Daemon-side incoming-message hook** — lives in the separate
-  `claude_whatsapp_integration` repo. Until it lands, live capture relies on
-  the 3-hourly sweep. Out of scope for an agent operating only inside this
-  folder.
-
-- **Phase 11 e2e coverage** — the e2e test in `gateway/src/e2e.test.ts` only
-  covers Phases 3–9 pure-function layer. The ZIP import path has been
-  validated in production but not in CI.
-  TODO(mark): decide if this is worth building now or after the next
-  Phase 11 bug.
-
-## Conventions reminders for any agent working here
-
-- Supabase queries on Kit tables MUST chain `.schema('kit')` — Kit tables
-  live in the `kit` schema, never `public`.
-- Open Brain writes go through `ContextBinder.capture()` — never insert into
-  `thoughts` directly.
-- `whatsapp_capture` defaults to `disabled` per contact. Silent storage of
-  WhatsApp messages is a privacy bug, not a feature.
+- Supabase queries MUST chain `.schema('kit')` — tables live in `kit` schema, never `public`.
+- Open Brain writes go through `ContextBinder.capture()` — never insert into `thoughts` directly.
+- `whatsapp_capture` defaults to `disabled` per contact. Silent storage is a privacy bug.
 - `People/` is gitignored — never commit it.
-- No Baileys anywhere in Kit. The gateway is a REST client of the dedicated
-  daemon on port 3142.
-- No mobile-app code, no push notifications, no message-sending tool —
-  v1.0 scope is fixed (see [future-work.md](future-work.md)).
+- No Baileys anywhere in Kit. Gateway is a REST client of the daemon on :3142.

@@ -56,6 +56,52 @@ Scratchpad for the ralph-loop. Each iteration must update this file.
 - `People/1 - Inner Circle/Peter Tan.md` — tier 1, fortnightly, +64 210 568 555, capture enabled (uncle, dad's youngest brother)
 - `People/1 - Inner Circle/Kat Osman.md` — tier 1, weekly, +44 7931 460 181, capture enabled (cousin)
 
+### PRIORITY 1 — Daemon live-push hook (blocks live WhatsApp capture)
+
+**Status:** Kit-side is already done (Phase 1). Work required is entirely in `claude_whatsapp_integration`.
+
+**Why this matters:** Without it, `MessageRouter.handleMessage` is only called via the scheduled sweep. Live capture (inactivity timer, real-time auto-capture) never fires.
+
+**What to implement in `claude_whatsapp_integration`:**
+
+1. `src/config.ts` — add `WA_INCOMING_HOOK_URL: string | null` (nullable; feature is off if unset):
+   ```ts
+   WA_INCOMING_HOOK_URL: nullableStrEnv("WA_INCOMING_HOOK_URL"),
+   ```
+
+2. `src/index.ts` — add a best-effort POST on every `message:received` event, after the existing group-membership handler:
+   ```ts
+   if (config.WA_INCOMING_HOOK_URL) {
+     const hookUrl = config.WA_INCOMING_HOOK_URL;
+     wa.on("message:received", (msg: any) => {
+       fetch(hookUrl, {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+           remoteJid:  msg.remoteJid,
+           fromMe:     msg.fromMe ?? false,
+           body:       msg.body ?? "",
+           timestamp:  msg.timestamp,
+           messageId:  msg.messageId,
+         }),
+       }).catch(() => {}); // best-effort; Kit outage must not crash the daemon
+     });
+   }
+   ```
+
+3. `.env.example` — add:
+   ```
+   # WA_INCOMING_HOOK_URL=http://127.0.0.1:3141/api/incoming-message
+   ```
+
+**Schema compatibility verified:** Kit's `incomingMsgSchema` at `gateway/src/routes/api.ts:84` expects `{ remoteJid, fromMe, body, timestamp (epoch ms), messageId }` — this matches the `WhatsAppMessage` fields the daemon emits.
+
+**No Kit gateway changes needed.** `POST /api/incoming-message` is already wired at `gateway/src/routes/api.ts:92` and calls `router.handleMessage(parsed.data)` directly.
+
+**Compatible with queued items:** This is additive to the daemon only. Kit fix commits (items 2–5 below) are unaffected.
+
+---
+
 ### Next session checklist
 1. Remove debug logs (`🔔`, `📄`, `📥`) from whatsapp.ts, phone-export-importer.ts, import-ingestor.ts, index.ts
 2. Commit kit fixes: `fix: Phase 11 production fixes — mode=full, contactToJid normalisation, add-contact command`

@@ -15,7 +15,11 @@
  */
 
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 import { config } from "./config.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { ContactRegistry } from "./services/contacts.js";
 import { CapturePipeline } from "./services/capture.js";
 import { MessageRouter } from "./services/message-router.js";
@@ -64,6 +68,13 @@ async function main() {
   // ── 5. Start REST API ──────────────────────────────────
 
   const app = express();
+  app.use((_req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "http://localhost:3143");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    if (_req.method === "OPTIONS") { res.sendStatus(204); return; }
+    next();
+  });
   app.use(express.json());
 
   const apiRouter = createApiRouter(
@@ -71,7 +82,9 @@ async function main() {
   );
   app.use("/api", apiRouter);
 
-  app.get("/", (_req, res) => res.redirect("/api/status"));
+  const webDist = path.resolve(__dirname, "../../web/dist");
+  app.use(express.static(webDist));
+  app.get("*", (_req, res) => res.sendFile(path.join(webDist, "index.html")));
 
   app.listen(config.PORT, () => {
     console.log();
