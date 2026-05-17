@@ -14,7 +14,18 @@ shared_resources:
   - port_3141
   - port_3142
 
-current_stage: verify_contact_sync
+current_stage: done
+
+daemon_pin:
+  repo: C:\dev\claude_whatsapp_integration
+  commit: b503624ce7cf5af75974c584047a369ee04d9ac0
+  message: "feat: add GET /api/groups endpoint"
+  verified: 2026-05-16
+  endpoints_consumed:
+    - GET /api/status
+    - GET /api/groups
+    - GET /api/chats/:jid/messages
+    - POST /api/chats/:jid/ack
 
 stages:
   commit-and-verify:
@@ -199,16 +210,16 @@ human_tasks:
     what: "Merge the GET /api/groups PR from claude_whatsapp_integration before gateway-api-expansion dispatches — the gateway proxies to that endpoint."
     done: true
 last_dispatch:
-  task_id: "kit-9083411e"
+  task_id: "kit-d4814689"
   stage: "daemon-groups-endpoint"
   model: "sonnet"
   loop: "single"
-  started: "2026-05-16T07:33:48"
-  ended: "2026-05-16T07:34:32"
-  result: "decision_needed"
+  started: "2026-05-16T11:52:37"
+  ended: "2026-05-16T11:53:08"
+  result: "done"
   iterations_used: 1
   tokens: { input: 0, output: 0, cost_usd: 0 }
-  decision: "This task requires modifying files under `C:\\dev\\claude_whatsapp_integration`, but I am scoped to `C:\\dev\\kit` only. I cannot read or write files outside that folder. Please either re-run this stage with the correct working directory (`C:\\dev\\claude_whatsapp_integration`) or grant me access to that path."
+  note: "Endpoint already present in daemon (shipped 2026-05-11). Verified manually 2026-05-16: GET /api/groups in src/routes/api.ts, 164 tests pass including groups.test.ts (4 tests). Stage closed."
 history:
   - stage: daemon-groups-endpoint
     result: skipped
