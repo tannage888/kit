@@ -94,13 +94,9 @@ export class ContactCreator {
     const whatsapp_capture = input.whatsapp_capture ?? "disabled";
     const wa_capture: CaptureMode = (input.wa_capture as CaptureMode) ?? "on_demand";
 
-    // 1. Write markdown file
+    // 1. Upsert to Supabase (source of truth)
     const folder = path.join(PEOPLE_DIR, TIER_FOLDER[input.tier]);
-    if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
     const filePath = path.join(folder, `${input.name}.md`);
-    fs.writeFileSync(filePath, buildMarkdown(input), "utf-8");
-
-    // 2. Upsert to Supabase
     const row = {
       id,
       name: input.name,
@@ -119,6 +115,10 @@ export class ContactCreator {
     };
     const { error } = await this.supabase.schema("kit").from("contacts").upsert(row, { onConflict: "id" });
     if (error) throw new Error(`DB upsert failed: ${error.message}`);
+
+    // 2. Render markdown from the canonical Supabase record
+    if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(filePath, buildMarkdown(input), "utf-8");
 
     // 3. Register in the live ContactRegistry so the contact is
     //    immediately usable (resolver, capture, sweep) without restart.
