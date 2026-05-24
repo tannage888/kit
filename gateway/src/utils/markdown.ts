@@ -34,6 +34,9 @@ export interface ContactRow {
   linkedin_capture: "enabled" | "disabled";
   instagram_username: string | null;
   instagram_capture: "enabled" | "disabled";
+  whatsapp_groups: string | null;
+  url: string | null;
+  wa_capture?: string | null;
   active: boolean;
 }
 
@@ -51,6 +54,7 @@ export interface InteractionRow {
   notes: string;
   date: string;
   created_at: string;
+  channel?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +231,8 @@ export function parseContactFile(
       linkedin_capture,
       instagram_username: fm.instagram_username ? String(fm.instagram_username) : null,
       instagram_capture,
+      whatsapp_groups: fm.whatsapp_groups ? String(fm.whatsapp_groups) : null,
+      url: fm.url ? String(fm.url) : null,
       active: true,
     },
     followUps: parseFollowUps(content, id),
@@ -307,4 +313,95 @@ export function uncompleteFollowUp(raw: string, text: string): string {
   const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(`^([-*]\\s+)~~(${escaped})~~$`, "m");
   return raw.replace(regex, `$1$2`);
+}
+
+// ---------------------------------------------------------------------------
+// Generator — render a complete markdown file from structured Supabase data
+// ---------------------------------------------------------------------------
+
+const TIER_RELATIONSHIP: Record<number, string> = {
+  1: "1-Inner Circle",
+  2: "2-Active",
+  3: "3-Business Contact",
+};
+
+function fmChannelLabel(channel: string | null | undefined): string {
+  switch (channel?.toLowerCase()) {
+    case "whatsapp":  return "WhatsApp";
+    case "linkedin":  return "LinkedIn";
+    case "instagram": return "Instagram";
+    case "email":     return "Email";
+    case "call":      return "Call";
+    case "in_person":
+    case "in person": return "In Person";
+    default:          return channel ?? "App";
+  }
+}
+
+/**
+ * Generate a complete People/*.md file from Supabase rows.
+ * This is the inverse of parseContactFile() — called whenever Supabase
+ * becomes the source of truth and needs to render to local markdown.
+ */
+export function generateContactFile(
+  contact: ContactRow,
+  followUps: FollowUpRow[],
+  interactions: InteractionRow[]
+): string {
+  const lines: string[] = ["---"];
+
+  lines.push(`name: ${contact.name}`);
+  lines.push(`relationship: ${TIER_RELATIONSHIP[contact.tier] ?? "3-Business Contact"}`);
+  lines.push(`frequency: ${contact.frequency}`);
+  if (contact.last_contact)        lines.push(`last_contact: ${contact.last_contact}`);
+  if (contact.next_action)         lines.push(`next_action: ${contact.next_action}`);
+  if (contact.social_battery_cost) lines.push(`social_battery: ${contact.social_battery_cost}`);
+  lines.push(`whatsapp_capture: ${contact.whatsapp_capture}`);
+  if (contact.wa_capture)          lines.push(`wa_capture: ${contact.wa_capture}`);
+  if (contact.whatsapp)            lines.push(`whatsapp: "${contact.whatsapp}"`);
+  if (contact.linkedin_username)   lines.push(`linkedin_username: ${contact.linkedin_username}`);
+  lines.push(`linkedin_capture: ${contact.linkedin_capture}`);
+  if (contact.instagram_username)  lines.push(`instagram_username: ${contact.instagram_username}`);
+  lines.push(`instagram_capture: ${contact.instagram_capture}`);
+  if (contact.preferred_channel)   lines.push(`preferred_channel: ${contact.preferred_channel}`);
+  if (contact.birthday)            lines.push(`birthday: ${contact.birthday}`);
+  if (contact.url)                 lines.push(`url: ${contact.url}`);
+  if (contact.whatsapp_groups)     lines.push(`whatsapp_groups: ${contact.whatsapp_groups}`);
+
+  lines.push("---");
+  lines.push("");
+  lines.push(`# ${contact.name}`);
+
+  if (contact.origin_story) {
+    lines.push("", "## Background", "", contact.origin_story);
+  }
+  if (contact.special_interests) {
+    lines.push("", "## Interests & Hooks", "", contact.special_interests);
+  }
+  if (contact.sensitive_topics) {
+    lines.push("", "## Sensitive Topics", "", contact.sensitive_topics);
+  }
+  if (contact.notes) {
+    lines.push("", "## Notes", "", contact.notes);
+  }
+
+  lines.push("", "## Interaction Log");
+  const sorted = [...interactions].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+  for (const interaction of sorted) {
+    const label = fmChannelLabel(interaction.channel);
+    lines.push("", `### ${interaction.date} — ${label}`, interaction.notes);
+  }
+
+  const pending   = followUps.filter((f) => !f.completed);
+  const completed = followUps.filter((f) => f.completed);
+  if (pending.length || completed.length) {
+    lines.push("", "**Follow-ups:**");
+    for (const fu of [...pending, ...completed]) {
+      lines.push(fu.completed ? `- ~~${fu.text}~~` : `- ${fu.text}`);
+    }
+  }
+
+  return lines.join("\n") + "\n";
 }

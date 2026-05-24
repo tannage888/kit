@@ -13,6 +13,7 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
 import { ContactRegistry } from "../services/contacts.js";
 import { MessageRouter } from "../services/message-router.js";
@@ -21,7 +22,7 @@ import { SweepScheduler } from "../services/sweep-scheduler.js";
 import { ImportIngestor } from "../services/import-ingestor.js";
 import { ContactCreator, type CreateContactInput } from "../services/contact-creator.js";
 import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
-import { setFrontmatterField } from "../utils/markdown.js";
+import { parseContactFile } from "../utils/markdown.js";
 import type { CaptureMode, Channel, GatewayStatus, TrackedContact } from "../types.js";
 import { EnergyService } from "../services/energy.js";
 
@@ -35,18 +36,6 @@ const TIER_DIRS = [
   { dir: "3 - Business Contact", tier: 3 },
 ];
 
-function findMarkdownFile(contactId: string): string | null {
-  for (const { dir } of TIER_DIRS) {
-    const tierPath = path.join(PEOPLE_DIR, dir);
-    if (!fs.existsSync(tierPath)) continue;
-    for (const file of fs.readdirSync(tierPath).filter((f) => f.endsWith(".md"))) {
-      const slug = file.replace(/\.md$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-      if (slug === contactId) return path.join(tierPath, file);
-    }
-  }
-  return null;
-}
-
 export function createApiRouter(
   contacts: ContactRegistry,
   router: MessageRouter,
@@ -57,6 +46,7 @@ export function createApiRouter(
 ): Router {
   const api = Router();
   const creator = new ContactCreator(contacts);
+  const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
 
   // ── Health / status ──────────────────────────────────────
 
@@ -281,6 +271,7 @@ export function createApiRouter(
     instagram_username: z.string().optional(),
     instagram_capture: z.enum(["enabled", "disabled"]).optional(),
     whatsapp_groups: z.string().optional(),
+    url: z.string().optional(),
   });
 
   api.put("/contacts/:id", async (req: Request, res: Response) => {
@@ -297,21 +288,44 @@ export function createApiRouter(
     }
     const fields = parsed.data;
 
-    const filePath = findMarkdownFile(id);
-    if (filePath) {
-      let raw = fs.readFileSync(filePath, "utf-8");
-      for (const [key, value] of Object.entries(fields)) {
-        if (value !== undefined) {
-          raw = setFrontmatterField(raw, key, String(value));
-        }
-      }
-      fs.writeFileSync(filePath, raw, "utf-8");
+    const { error } = await supabase
+      .schema("kit")
+      .from("contacts")
+      .update(fields)
+      .eq("id", id);
+
+    if (error) {
+      res.status(500).json({ error: "db_update_failed", detail: error.message });
+      return;
     }
 
     Object.assign(contact, fields);
     if (fields.wa_capture) contacts.setCaptureMode(id, fields.wa_capture as CaptureMode);
 
-    res.json({ ok: true, filePath: filePath ?? null });
+    res.json({ ok: true });
+  });
+
+  // ── URL backfill (one-shot migration) ────────────────────
+  // Reads existing People/*.md files and writes any url frontmatter field
+  // found to kit.contacts. Run once after deploying this change.
+
+  api.post("/contacts/backfill-url", async (_req: Request, res: Response) => {
+    let updated = 0;
+    let skipped = 0;
+    for (const { dir, tier } of TIER_DIRS) {
+      const tierPath = path.join(PEOPLE_DIR, dir);
+      if (!fs.existsSync(tierPath)) continue;
+      for (const file of fs.readdirSync(tierPath).filter((f) => f.endsWith(".md"))) {
+        try {
+          const { contact } = parseContactFile(path.join(tierPath, file), tier);
+          if (!contact.url) { skipped++; continue; }
+          await supabase.schema("kit").from("contacts")
+            .update({ url: contact.url }).eq("id", contact.id);
+          updated++;
+        } catch { skipped++; }
+      }
+    }
+    res.json({ ok: true, updated, skipped });
   });
 
   // ── Capture mode ─────────────────────────────────────────
