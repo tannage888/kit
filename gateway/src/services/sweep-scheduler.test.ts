@@ -26,15 +26,17 @@ vi.mock("../config.js", () => ({
 const mockSupabaseSingle = vi.fn();
 const mockSupabaseUpsert = vi.fn().mockResolvedValue({ error: null });
 
+// Build a chainable eq object so .eq().eq().single() works for group watermarks
+const makeEqChainable = (): any => ({
+  eq: () => makeEqChainable(),
+  single: mockSupabaseSingle,
+});
+
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
     schema: () => ({
       from: () => ({
-        select: () => ({
-          eq: () => ({
-            single: mockSupabaseSingle,
-          }),
-        }),
+        select: () => makeEqChainable(),
         upsert: mockSupabaseUpsert,
       }),
     }),
@@ -58,6 +60,7 @@ function makeContact(overrides: Partial<TrackedContact> = {}): TrackedContact {
     linkedin_capture: "disabled",
     instagram_username: null,
     instagram_capture: "disabled",
+    whatsapp_groups: null,
     ...overrides,
   };
 }
@@ -290,5 +293,47 @@ describe("SweepScheduler", () => {
 
     const [, , sinceMs] = mockFetcher.fetchSince.mock.calls[0];
     expect(sinceMs).toBe(storedTs);
+  });
+
+  it("sweeps group JIDs when whatsapp_groups is set", async () => {
+    const contact = makeContact({ whatsapp_groups: "120363199811716353@g.us" });
+    const oneToOneThread = makeThread(contact);
+    const groupThread = makeThread(contact);
+    const { scheduler, mockFetcher, mockCapture } = makeScheduler(
+      [contact],
+      [[oneToOneThread], [groupThread]]
+    );
+
+    const result = await scheduler.runSweep();
+
+    // fetchSince called twice: once for 1:1, once for the group JID
+    expect(mockFetcher.fetchSince).toHaveBeenCalledTimes(2);
+    expect(mockFetcher.fetchSince.mock.calls[1][0]).toBe("120363199811716353@g.us");
+
+    // Both watermarks saved — one for 1:1, one for group
+    expect(mockSupabaseUpsert).toHaveBeenCalledTimes(2);
+    expect(mockSupabaseUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ group_jid: "120363199811716353@g.us" }),
+      expect.any(Object)
+    );
+
+    // Counts aggregated across 1:1 and group
+    expect(result?.threadsProcessed).toBe(2);
+    expect(result?.details[0]?.messagesFound).toBe(
+      oneToOneThread.messages.length + groupThread.messages.length
+    );
+    expect(mockCapture.processAndCommit).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips group sweep when whatsapp_groups is null", async () => {
+    const contact = makeContact({ whatsapp_groups: null });
+    const thread = makeThread(contact);
+    const { scheduler, mockFetcher } = makeScheduler([contact], [[thread]]);
+
+    await scheduler.runSweep();
+
+    // fetchSince only called once — no group JIDs to sweep
+    expect(mockFetcher.fetchSince).toHaveBeenCalledTimes(1);
+    expect(mockFetcher.fetchSince.mock.calls[0][0]).toContain("@s.whatsapp.net");
   });
 });
