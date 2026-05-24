@@ -213,7 +213,8 @@ export class SweepScheduler {
       };
     }
 
-    // Load the sweep watermark for this contact
+    // ── 1:1 sweep ────────────────────────────────────────────
+
     const sinceMs = await this.loadWatermark(contact.id);
     const jid = contact.whatsapp.replace(/^\+/, "").replace(/\s+/g, "") + "@s.whatsapp.net";
 
@@ -234,53 +235,130 @@ export class SweepScheduler {
 
     const totalMessages = threads.reduce((sum, t) => sum + t.messages.length, 0);
 
-    if (threads.length === 0) {
-      console.log(`  ⏩ ${contact.name} — no new messages since last sweep.`);
-      await this.saveWatermark(contact.id, sinceMs, 0);
-      return {
-        contactId: contact.id,
-        contactName: contact.name,
-        messagesFound: 0,
-        threadsProcessed: 0,
-        skipped: false,
-      };
-    }
-
-    console.log(
-      `  📨 ${contact.name} — ${totalMessages} messages in ${threads.length} thread(s)`
-    );
-
     let threadsProcessed = 0;
     let lastMessageTs = sinceMs;
     let captureError: string | undefined;
 
-    for (const thread of threads) {
-      try {
-        await this.capture.processAndCommit(thread);
-        threadsProcessed++;
-        // Track the newest message we've processed
-        lastMessageTs = Math.max(lastMessageTs, thread.lastActivityAt);
-      } catch (err) {
-        console.error(
-          `  ❌ Capture failed for thread (${contact.name} at ${new Date(thread.startedAt).toISOString()}):`,
-          (err as Error).message
-        );
-        captureError = (err as Error).message;
-        // Continue processing remaining threads
+    if (threads.length === 0) {
+      console.log(`  ⏩ ${contact.name} — no new 1:1 messages since last sweep.`);
+    } else {
+      console.log(
+        `  📨 ${contact.name} — ${totalMessages} messages in ${threads.length} thread(s)`
+      );
+
+      for (const thread of threads) {
+        try {
+          await this.capture.processAndCommit(thread);
+          threadsProcessed++;
+          lastMessageTs = Math.max(lastMessageTs, thread.lastActivityAt);
+        } catch (err) {
+          console.error(
+            `  ❌ Capture failed for thread (${contact.name} at ${new Date(thread.startedAt).toISOString()}):`,
+            (err as Error).message
+          );
+          captureError = (err as Error).message;
+        }
       }
     }
 
-    // Save watermark to the end of the most recent successfully processed thread
     await this.saveWatermark(contact.id, lastMessageTs, totalMessages);
+
+    // ── Group sweep ───────────────────────────────────────────
+
+    const groupJids = (contact.whatsapp_groups ?? "")
+      .split(",")
+      .map((j) => j.trim())
+      .filter(Boolean);
+
+    let groupMessagesFound = 0;
+    let groupThreadsProcessed = 0;
+
+    for (const groupJid of groupJids) {
+      const groupSinceMs = await this.loadGroupWatermark(contact.id, groupJid);
+
+      let groupThreads;
+      try {
+        groupThreads = await this.fetcher.fetchSince(groupJid, contact, groupSinceMs);
+      } catch (err) {
+        console.error(
+          `❌ Group history fetch failed for ${contact.name} (${groupJid}):`,
+          (err as Error).message
+        );
+        continue;
+      }
+
+      const groupTotalMessages = groupThreads.reduce((sum, t) => sum + t.messages.length, 0);
+      groupMessagesFound += groupTotalMessages;
+
+      let groupLastMessageTs = groupSinceMs;
+      for (const thread of groupThreads) {
+        thread.groupJid = groupJid;
+        try {
+          await this.capture.processAndCommit(thread);
+          groupThreadsProcessed++;
+          groupLastMessageTs = Math.max(groupLastMessageTs, thread.lastActivityAt);
+        } catch (err) {
+          console.error(
+            `  ❌ Group capture failed for thread (${contact.name} at ${new Date(thread.startedAt).toISOString()}):`,
+            (err as Error).message
+          );
+          captureError = (err as Error).message;
+        }
+      }
+
+      await this.saveGroupWatermark(contact.id, groupJid, groupLastMessageTs, groupTotalMessages);
+    }
 
     return {
       contactId: contact.id,
       contactName: contact.name,
-      messagesFound: totalMessages,
-      threadsProcessed,
+      messagesFound: totalMessages + groupMessagesFound,
+      threadsProcessed: threadsProcessed + groupThreadsProcessed,
       skipped: false,
       error: captureError,
     };
+  }
+
+  private async loadGroupWatermark(contactId: string, groupJid: string): Promise<number> {
+    const { data } = await this.supabase
+      .schema("kit")
+      .from("wa_group_sweep_state")
+      .select("last_message_ts")
+      .eq("contact_id", contactId)
+      .eq("group_jid", groupJid)
+      .single();
+
+    if (data?.last_message_ts) {
+      return data.last_message_ts as number;
+    }
+
+    const defaultLookbackMs = config.SWEEP_INITIAL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+    return Date.now() - defaultLookbackMs;
+  }
+
+  private async saveGroupWatermark(
+    contactId: string,
+    groupJid: string,
+    lastMessageTs: number,
+    messagesFound: number
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .schema("kit")
+      .from("wa_group_sweep_state")
+      .upsert(
+        {
+          contact_id: contactId,
+          group_jid: groupJid,
+          last_swept_at: new Date().toISOString(),
+          last_message_ts: lastMessageTs,
+          messages_found: messagesFound,
+        },
+        { onConflict: "contact_id,group_jid" }
+      );
+
+    if (error) {
+      console.error(`❌ Failed to save group sweep watermark for ${contactId}/${groupJid}:`, error.message);
+    }
   }
 
   /**
