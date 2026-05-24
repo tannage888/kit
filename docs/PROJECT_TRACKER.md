@@ -2,7 +2,7 @@
 project: kit
 display_name: "Kit — Relationship Manager"
 owner: seang
-status: active
+status: done
 priority: 2
 created: 2026-04-01
 last_reviewed: 2026-05-16
@@ -14,7 +14,7 @@ shared_resources:
   - port_3141
   - port_3142
 
-current_stage: done
+current_stage: supabase-source-of-truth-backfill
 
 daemon_pin:
   repo: C:\dev\claude_whatsapp_integration
@@ -28,6 +28,157 @@ daemon_pin:
     - POST /api/chats/:jid/ack
 
 stages:
+  supabase-source-of-truth:
+    model: sonnet
+    loop: ralph
+    max_iterations: 10
+    prompt: |
+      Flip Kit's contact sync so Supabase is the source of truth and People/*.md files
+      are generated artifacts rendered from Supabase. All changes are in C:\dev\kit\gateway.
+
+      ## Context
+      Currently markdown files are canonical — API writes patch markdown, chokidar triggers
+      Supabase sync. We want the reverse: all writes go to Supabase first, markdown is
+      regenerated from Supabase on every contact update. ContactRegistry already loads from
+      Supabase exclusively so that layer needs no changes.
+
+      Caveat to document: direct markdown edits will be overwritten by the next
+      Supabase→markdown render. All edits must go through API or MCP tools.
+
+      ## 1. gateway/src/utils/markdown.ts
+      Add url: string | null to ContactRow interface.
+      Parse url from frontmatter in parseContactFile().
+      Add new exported function:
+        generateContactFile(contact: ContactRow, followUps: FollowUpRow[], interactions: InteractionRow[]): string
+      It must produce a complete markdown file with:
+      - YAML frontmatter block with all ContactRow fields (name, relationship_tier, frequency,
+        last_contact, next_action, social_battery_cost, whatsapp_capture, origin_story,
+        special_interests, sensitive_topics, preferred_channel, whatsapp_number, birthday,
+        notes, url, linkedin_username, linkedin_capture, instagram_username, instagram_capture,
+        whatsapp_groups — omit null/empty optional fields)
+      - "# {name}" heading
+      - "## Interaction Log" section with interactions newest-first, each as
+        "**{date} — {channel}:** {notes}"
+      - "**Follow-ups:**" section as a checklist, completed items struck through (~~text~~)
+
+      ## 2. gateway/src/services/sync.ts
+      REMOVE the chokidar watcher setup and the entire onMarkdownChange() handler.
+      REMOVE the mdToDbGuard and dbToMdGuard loop-prevention logic.
+      REMOVE the chokidar import and dependency.
+      UPDATE onContactUpdate(): instead of patching specific frontmatter fields with
+      setFrontmatterField(), fetch the contact's follow_ups and interaction_log rows from
+      Supabase, then call generateContactFile() and write the full file to the correct
+      People/ path.
+      KEEP onInteractionInsert(), onFollowUpInsert(), onFollowUpUpdate() unchanged —
+      they still write activity to markdown via prependInteractionEntry/appendFollowUp/
+      completeFollowUp.
+
+      ## 3. gateway/src/routes/api.ts — PUT /api/contacts/:id
+      Current: find markdown file → setFrontmatterField loop → fs.writeFileSync → chokidar fires.
+      New: validate fields → upsert changed fields to kit.contacts via Supabase → return 200.
+      (The Realtime onContactUpdate() will fire and regenerate markdown automatically.)
+      Remove ALL markdown file reads and writes from this handler.
+
+      ## 4. gateway/src/services/contact-creator.ts
+      Current: fs.writeFileSync(markdown) then supabase.upsert(contact).
+      New: supabase.upsert(contact) first, then generateContactFile() → fs.writeFileSync(markdown).
+
+      ## 5. gateway/src/types.ts
+      Add url: string | null to TrackedContact.
+
+      ## 6. gateway/src/services/contacts.ts
+      Add url to the SELECT string in loadFromDatabase().
+      Populate url: row.url ?? null on the TrackedContact object.
+
+      ## 7. gateway/src/utils/markdown.test.ts
+      Add tests for generateContactFile() — at minimum: round-trip test (parseContactFile →
+      generateContactFile produces equivalent frontmatter), and empty interactions/followUps case.
+
+      ## 8. One-time url backfill endpoint
+      Add POST /api/contacts/backfill-url to api.ts (admin endpoint, no auth needed since
+      gateway is local-only). It reads every People/*.md file, extracts the url frontmatter
+      field if present, and upserts it to kit.contacts. Returns a summary of how many were
+      updated. This is a one-shot migration; document it in the response.
+
+      Run npm test in C:\dev\kit\gateway after each major step. All existing tests must
+      remain green throughout.
+    success_criteria: |
+      npm test in C:\dev\kit\gateway exits 0.
+      PUT /api/contacts/:id no longer reads or writes markdown files directly.
+      onContactUpdate() in sync.ts calls generateContactFile() and writes the full file.
+      chokidar is removed from sync.ts.
+      url field present on TrackedContact and in loadFromDatabase() SELECT.
+    needs_human_for:
+      - supabase_realtime_not_firing_in_dev
+      - people_directory_path_resolution_errors
+
+  group-sweep:
+    model: sonnet
+    loop: ralph
+    max_iterations: 8
+    prompt: |
+      Add group chat sweeping to the Kit gateway at C:\dev\kit.
+
+      ## Context
+      Kit's sweep currently only fetches 1:1 WhatsApp threads per contact. Contacts can
+      have group JIDs assigned via the web UI (whatsapp_groups field), but this field is
+      never read by the sweep pipeline. Wire it all the way through so assigned groups
+      are swept alongside the 1:1 chat.
+
+      ## Supabase migrations (apply via MCP to the kit project)
+      1. ALTER TABLE kit.contacts ADD COLUMN IF NOT EXISTS whatsapp_groups text;
+      2. CREATE TABLE IF NOT EXISTS kit.wa_group_sweep_state (
+           contact_id      text        NOT NULL,
+           group_jid       text        NOT NULL,
+           last_swept_at   timestamptz NOT NULL,
+           last_message_ts bigint      NOT NULL,
+           messages_found  integer     NOT NULL DEFAULT 0,
+           PRIMARY KEY (contact_id, group_jid)
+         );
+
+      ## Code changes
+
+      gateway/src/types.ts:
+      - Add `whatsapp_groups: string | null` to TrackedContact
+      - Add `groupJid?: string` to ConversationThread
+
+      gateway/src/services/contacts.ts:
+      - Add whatsapp_groups to the Supabase SELECT string in loadFromDatabase()
+      - Populate it on TrackedContact (null if absent)
+
+      gateway/src/services/sweep-scheduler.ts:
+      - Add private loadGroupWatermark(contactId, groupJid): Promise<number>
+        Falls back to SWEEP_INITIAL_LOOKBACK_DAYS default. Queries kit.wa_group_sweep_state.
+      - Add private saveGroupWatermark(contactId, groupJid, lastMessageTs, messagesFound): Promise<void>
+        Upserts into kit.wa_group_sweep_state by (contact_id, group_jid).
+      - In sweepContact(), after the existing 1:1 block:
+        Parse contact.whatsapp_groups as comma-separated JIDs.
+        For each group JID: loadGroupWatermark → fetchSince → tag threads with groupJid
+        → processAndCommit → saveGroupWatermark.
+        Fold group messagesFound and threadsProcessed into the existing ContactSweepResult totals.
+
+      gateway/src/services/history-fetcher.ts: NO CHANGES — fetchSince already accepts any JID.
+
+      ## Tests (gateway/src/services/sweep-scheduler.test.ts)
+      - Contact with whatsapp_groups: "120@g.us" → fetchSince called twice (1:1 + group),
+        both watermarks saved, counts aggregated correctly
+      - Contact with whatsapp_groups: null → behaves exactly as before (no extra calls)
+
+      ## Serialisation
+      whatsapp_groups is a comma-separated string: "120@g.us, 121@g.us"
+      Parse with: value.split(",").map(j => j.trim()).filter(Boolean)
+
+      Run npm test in C:\dev\kit\gateway after each major change. All 212 existing tests
+      must remain green.
+    success_criteria: |
+      npm test in C:\dev\kit\gateway exits 0.
+      kit.wa_group_sweep_state table exists in Supabase.
+      whatsapp_groups column exists on kit.contacts.
+      sweepContact() calls fetchSince for each group JID in contact.whatsapp_groups.
+    needs_human_for:
+      - supabase_migration_errors
+      - baileys_group_jid_format_changes
+
   commit-and-verify:
     model: sonnet
     loop: single
@@ -191,6 +342,89 @@ stages:
       npm test in C:\dev\kit\gateway exits 0.
     needs_human_for: []
 
+  pwa:
+    model: sonnet
+    loop: ralph
+    max_iterations: 6
+    prompt: |
+      Make the Kit web UI a Progressive Web App (PWA) so it can be installed on a phone
+      from the browser. Full plan is in C:\dev\kit\docs\pwa-plan.md — read it first.
+
+      ## Prerequisites (must be confirmed before starting)
+      1. Confirm Cloudflare Tunnel is running and kit.yourdomain.com resolves to localhost:3141.
+         If not, stop and escalate — this stage cannot complete without a public HTTPS endpoint.
+      2. Confirm Cloudflare Access is protecting the URL (Google login gate).
+         If not, stop and escalate — do not expose the gateway without auth.
+
+      ## Code changes
+
+      ### 1. gateway/src/index.ts — CORS
+      Add the public domain (from env var PUBLIC_URL or hardcoded) to the CORS allowed origins
+      alongside http://localhost:3143.
+
+      ### 2. web/public/manifest.json — create
+      {
+        "name": "Kit",
+        "short_name": "Kit",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#000000",
+        "icons": [
+          { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+          { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+          { "src": "/icons/icon-180.png", "sizes": "180x180", "type": "image/png" }
+        ]
+      }
+
+      ### 3. web/public/icons/ — create placeholder icons
+      Generate simple solid-colour PNG icons at 192x192, 512x512, and 180x180 using
+      the canvas API or a script. They can be plain coloured squares — the user will
+      replace them later.
+
+      ### 4. web/index.html — add meta tags
+      <link rel="manifest" href="/manifest.json" />
+      <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      <meta name="theme-color" content="#000000" />
+
+      ### 5. web/ — install and configure vite-plugin-pwa
+      npm install -D vite-plugin-pwa workbox-window
+      Add to vite.config.ts:
+        import { VitePWA } from 'vite-plugin-pwa'
+        plugins: [react(), VitePWA({
+          registerType: 'autoUpdate',
+          manifest: false,  // we manage manifest.json manually
+          workbox: {
+            runtimeCaching: [{
+              urlPattern: /\/api\/.*/,
+              handler: 'NetworkFirst',
+              options: { cacheName: 'kit-api', networkTimeoutSeconds: 5 }
+            }]
+          }
+        })]
+
+      ### 6. Mobile UX audit
+      Check all interactive elements are at least 44x44px touch targets.
+      Check nothing overflows viewport width on a 390px screen.
+      Add safe-area-inset padding to any fixed bottom elements.
+
+      Run npm run build in C:\dev\kit\web after each major step. All gateway tests must
+      remain green (npm test in C:\dev\kit\gateway).
+
+    success_criteria: |
+      npm run build in C:\dev\kit\web exits 0.
+      npm test in C:\dev\kit\gateway exits 0.
+      web/public/manifest.json exists with correct shape.
+      vite-plugin-pwa is configured in web/vite.config.ts.
+      Lighthouse PWA score >= 90 (run manually after deploy).
+    needs_human_for:
+      - cloudflare_tunnel_not_running
+      - cloudflare_access_not_configured
+      - icon_design (placeholder icons are fine to ship, user replaces later)
+      - public_domain_not_yet_decided
+
 next_actions: []
 blockers: []
 human_tasks:
@@ -210,16 +444,15 @@ human_tasks:
     what: "Merge the GET /api/groups PR from claude_whatsapp_integration before gateway-api-expansion dispatches — the gateway proxies to that endpoint."
     done: true
 last_dispatch:
-  task_id: "kit-d4814689"
-  stage: "daemon-groups-endpoint"
+  task_id: "kit-0101187d"
+  stage: "group-sweep"
   model: "sonnet"
-  loop: "single"
-  started: "2026-05-16T11:52:37"
-  ended: "2026-05-16T11:53:08"
+  loop: "ralph"
+  started: "2026-05-18T07:55:58"
+  ended: "2026-05-18T08:17:07"
   result: "done"
   iterations_used: 1
   tokens: { input: 0, output: 0, cost_usd: 0 }
-  note: "Endpoint already present in daemon (shipped 2026-05-11). Verified manually 2026-05-16: GET /api/groups in src/routes/api.ts, 164 tests pass including groups.test.ts (4 tests). Stage closed."
 history:
   - stage: daemon-groups-endpoint
     result: skipped

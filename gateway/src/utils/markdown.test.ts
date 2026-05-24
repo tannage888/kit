@@ -10,11 +10,15 @@ import {
   parseFollowUps,
   extractPhone,
   parseContactFile,
+  generateContactFile,
   setFrontmatterField,
   prependInteractionEntry,
   appendFollowUp,
   completeFollowUp,
   uncompleteFollowUp,
+  type ContactRow,
+  type FollowUpRow,
+  type InteractionRow,
 } from "./markdown.js";
 
 // ---------------------------------------------------------------------------
@@ -467,5 +471,92 @@ Brief check-in.
     expect(contact.origin_story).toBeNull();
     expect(contact.notes).toBeNull();
     expect(interactions).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateContactFile
+// ---------------------------------------------------------------------------
+
+describe("generateContactFile", () => {
+  const baseContact: ContactRow = {
+    id: "alice_example",
+    name: "Alice Example",
+    tier: 1,
+    frequency: "Monthly",
+    frequency_days: 30,
+    last_contact: "2026-04-01",
+    next_action: "2026-05-01",
+    social_battery_cost: "Medium",
+    origin_story: "Met at a conference.",
+    special_interests: "Cricket, sourdough.",
+    sensitive_topics: "Recent divorce.",
+    preferred_channel: "WhatsApp",
+    birthday: "1985-07-14",
+    whatsapp_capture: "enabled",
+    notes: "Ask about mum.",
+    whatsapp: "+447700900123",
+    linkedin_username: "alice",
+    linkedin_capture: "disabled",
+    instagram_username: null,
+    instagram_capture: "disabled",
+    whatsapp_groups: null,
+    url: "https://linkedin.com/in/alice",
+    wa_capture: "on_demand",
+    active: true,
+  };
+
+  it("produces valid YAML frontmatter with all populated fields", () => {
+    const output = generateContactFile(baseContact, [], []);
+    expect(output).toContain("name: Alice Example");
+    expect(output).toContain("relationship: 1-Inner Circle");
+    expect(output).toContain("frequency: Monthly");
+    expect(output).toContain("whatsapp: \"+447700900123\"");
+    expect(output).toContain("url: https://linkedin.com/in/alice");
+    expect(output).toContain("whatsapp_capture: enabled");
+  });
+
+  it("omits null optional fields from frontmatter", () => {
+    const output = generateContactFile(baseContact, [], []);
+    expect(output).not.toContain("instagram_username:");
+    expect(output).not.toContain("whatsapp_groups:");
+  });
+
+  it("renders interaction log newest-first", () => {
+    const interactions: InteractionRow[] = [
+      { id: "i1", contact_id: "alice_example", notes: "Old chat", date: "2026-03-01", created_at: "", channel: "WhatsApp" },
+      { id: "i2", contact_id: "alice_example", notes: "Recent call", date: "2026-04-01", created_at: "", channel: "call" },
+    ];
+    const output = generateContactFile(baseContact, [], interactions);
+    const recentIdx = output.indexOf("Recent call");
+    const oldIdx = output.indexOf("Old chat");
+    expect(recentIdx).toBeLessThan(oldIdx);
+    expect(output).toContain("### 2026-04-01 — Call");
+    expect(output).toContain("### 2026-03-01 — WhatsApp");
+  });
+
+  it("renders pending follow-ups before completed ones with strikethrough", () => {
+    const followUps: FollowUpRow[] = [
+      { id: "f1", contact_id: "alice_example", text: "Done task", completed: true, created_at: "" },
+      { id: "f2", contact_id: "alice_example", text: "Pending task", completed: false, created_at: "" },
+    ];
+    const output = generateContactFile(baseContact, followUps, []);
+    expect(output).toContain("- Pending task");
+    expect(output).toContain("- ~~Done task~~");
+    const pendingIdx = output.indexOf("- Pending task");
+    const doneIdx = output.indexOf("- ~~Done task~~");
+    expect(pendingIdx).toBeLessThan(doneIdx);
+  });
+
+  it("empty interactions and followUps produces valid minimal file", () => {
+    const minimal: ContactRow = {
+      ...baseContact,
+      origin_story: null, special_interests: null,
+      sensitive_topics: null, notes: null,
+    };
+    const output = generateContactFile(minimal, [], []);
+    expect(output).toContain("# Alice Example");
+    expect(output).toContain("## Interaction Log");
+    expect(output).not.toContain("**Follow-ups:**");
   });
 });

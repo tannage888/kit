@@ -25,6 +25,8 @@ export interface TrackedContact {
   linkedin_capture: "enabled" | "disabled";
   instagram_username: string | null;
   instagram_capture: "enabled" | "disabled";
+  whatsapp_groups: string | null; // comma-separated group JIDs
+  url: string | null;
 }
 
 // ── Message types ──────────────────────────────────────────
@@ -50,6 +52,7 @@ export interface ConversationThread {
   startedAt: number; // epoch ms of first message
   lastActivityAt: number; // epoch ms of most recent message
   channel: Channel;
+  groupJid?: string; // set when this thread came from a group chat sweep
 }
 
 // ── Capture result (from Claude summarisation) ─────────────
