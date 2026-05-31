@@ -127,9 +127,9 @@ export function createApiRouter(
   api.get("/contacts/:id", async (req: Request, res: Response) => {
     const id = req.params["id"] as string;
     const [contactRes, interactionsRes, followUpsRes] = await Promise.all([
-      supabase.from("contacts").select("*").eq("id", id).single(),
-      supabase.from("interaction_log").select("id, date, notes, channel").eq("contact_id", id).order("date", { ascending: false }).limit(20),
-      supabase.from("follow_ups").select("id, text, completed, created_at").eq("contact_id", id).order("completed").order("created_at", { ascending: false }),
+      supabase.schema("kit").from("contacts").select("*").eq("id", id).single(),
+      supabase.schema("kit").from("interaction_log").select("id, date, notes, channel").eq("contact_id", id).order("date", { ascending: false }).limit(20),
+      supabase.schema("kit").from("follow_ups").select("id, text, completed, created_at").eq("contact_id", id).order("completed").order("created_at", { ascending: false }),
     ]);
     if (!contactRes.data) { res.status(404).json({ error: "contact_not_found" }); return; }
     res.json({ contact: contactRes.data, interactions: interactionsRes.data ?? [], followUps: followUpsRes.data ?? [] });
