@@ -16,6 +16,30 @@ interface Contact {
   linkedin_capture: string;
   instagram_username: string | null;
   instagram_capture: string;
+  origin_story: string | null;
+  special_interests: string | null;
+  sensitive_topics: string | null;
+  notes: string | null;
+  url: string | null;
+}
+
+interface Interaction {
+  id: string;
+  date: string;
+  notes: string;
+  channel: string | null;
+}
+
+interface FollowUp {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+interface ContactFull {
+  contact: Contact;
+  interactions: Interaction[];
+  followUps: FollowUp[];
 }
 
 interface Group {
@@ -73,16 +97,19 @@ export default function ContactDetail() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'profile' | 'history'>('profile');
+  const [history, setHistory] = useState<{ interactions: Interaction[]; followUps: FollowUp[] } | null>(null);
 
   useEffect(() => {
     Promise.all([
-      api.get<Contact[]>('/api/contacts'),
+      api.get<ContactFull>(`/api/contacts/${id}`),
       api.get<Group[]>('/api/groups').catch(() => [] as Group[]),
-    ]).then(([contacts, grps]) => {
-      const found = contacts.find((c) => c.id === id);
+    ]).then(([full, grps]) => {
+      const found = full.contact;
       if (!found) { setError('Contact not found'); return; }
       setContact(found);
       setGroups(grps);
+      setHistory({ interactions: full.interactions, followUps: full.followUps });
       setForm({
         tier: found.tier,
         frequency: found.frequency,
@@ -152,6 +179,13 @@ export default function ContactDetail() {
 
   const selectStyle = { ...inputStyle, width: 'auto' };
 
+  const tabBtn = (t: 'profile' | 'history'): React.CSSProperties => ({
+    background: tab === t ? '#7c6fcd' : 'transparent',
+    border: 'none', cursor: 'pointer', fontSize: '0.9rem',
+    padding: '0.4rem 0.9rem', borderRadius: 6, marginRight: '0.25rem',
+    color: tab === t ? '#fff' : '#666',
+  });
+
   return (
     <div style={{ maxWidth: 560 }}>
       <button
@@ -161,7 +195,81 @@ export default function ContactDetail() {
         ← Back
       </button>
 
-      <h1 style={{ marginBottom: '1.5rem' }}>{contact.name}</h1>
+      <h1 style={{ marginBottom: '1rem' }}>{contact.name}</h1>
+
+      <div style={{ marginBottom: '1.5rem' }}>
+        <button style={tabBtn('profile')} onClick={() => setTab('profile')}>Profile</button>
+        <button style={tabBtn('history')} onClick={() => setTab('history')}>History</button>
+      </div>
+
+      {tab === 'history' && history && (
+        <div>
+          {history.followUps.filter(f => !f.completed).length > 0 && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ color: '#a0a0b0', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Open Follow-ups</h3>
+              {history.followUps.filter(f => !f.completed).map(fu => (
+                <div key={fu.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.4rem', color: '#e0e0e0', fontSize: '0.9rem' }}>
+                  <span style={{ color: '#7c6fcd', marginTop: 2 }}>□</span>
+                  <span>{fu.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {contact.origin_story && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ color: '#a0a0b0', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Background</h3>
+              <p style={{ color: '#ccc', fontSize: '0.9rem', lineHeight: 1.5 }}>{contact.origin_story}</p>
+            </div>
+          )}
+
+          {contact.special_interests && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ color: '#a0a0b0', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Interests</h3>
+              <p style={{ color: '#ccc', fontSize: '0.9rem', lineHeight: 1.5 }}>{contact.special_interests}</p>
+            </div>
+          )}
+
+          {contact.sensitive_topics && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ color: '#a0a0b0', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Sensitive Topics</h3>
+              <p style={{ color: '#f87171', fontSize: '0.9rem', lineHeight: 1.5 }}>{contact.sensitive_topics}</p>
+            </div>
+          )}
+
+          {contact.notes && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ color: '#a0a0b0', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Notes</h3>
+              <p style={{ color: '#ccc', fontSize: '0.9rem', lineHeight: 1.5 }}>{contact.notes}</p>
+            </div>
+          )}
+
+          {history.interactions.length > 0 && (
+            <div>
+              <h3 style={{ color: '#a0a0b0', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Interaction Log</h3>
+              {history.interactions.map(interaction => (
+                <div key={interaction.id} style={{ borderLeft: '2px solid #333', paddingLeft: '0.75rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                    <span style={{ color: '#a0a0b0', fontSize: '0.8rem' }}>{interaction.date}</span>
+                    {interaction.channel && (
+                      <span style={{ background: '#1e1e35', border: '1px solid #333', borderRadius: 4, padding: '0.1rem 0.4rem', fontSize: '0.72rem', color: '#7c6fcd' }}>
+                        {interaction.channel}
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ color: '#ccc', fontSize: '0.88rem', lineHeight: 1.5, margin: 0 }}>{interaction.notes}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {history.interactions.length === 0 && !contact.origin_story && !contact.notes && (
+            <p style={{ color: '#555', fontSize: '0.9rem' }}>No history recorded yet.</p>
+          )}
+        </div>
+      )}
+
+      {tab === 'profile' && (<>
 
       <Field label="Tier">
         <select style={selectStyle} value={form.tier} onChange={(e) => set('tier', Number(e.target.value))}>
@@ -271,6 +379,7 @@ export default function ContactDetail() {
           </span>
         )}
       </div>
+      </>)}
     </div>
   );
 }

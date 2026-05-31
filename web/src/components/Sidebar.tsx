@@ -7,6 +7,7 @@ const links = [
   { to: '/groups', label: 'Groups' },
   { to: '/captures', label: 'Captures' },
   { to: '/sweep', label: 'Sweep' },
+  { to: '/chat', label: 'Chat' },
 ];
 
 export default function Sidebar() {
