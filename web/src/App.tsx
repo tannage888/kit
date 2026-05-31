@@ -1,12 +1,12 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import ChatPanel from './components/ChatPanel';
 import Dashboard from './pages/Dashboard';
 import Contacts from './pages/Contacts';
 import ContactDetail from './pages/ContactDetail';
 import Groups from './pages/Groups';
 import Captures from './pages/Captures';
 import Sweep from './pages/Sweep';
-import Chat from './pages/Chat';
 import './App.css';
 
 export default function App() {
@@ -22,10 +22,10 @@ export default function App() {
             <Route path="/groups" element={<Groups />} />
             <Route path="/captures" element={<Captures />} />
             <Route path="/sweep" element={<Sweep />} />
-            <Route path="/chat" element={<Chat />} />
           </Routes>
         </main>
       </div>
+      <ChatPanel />
     </BrowserRouter>
   );
 }
