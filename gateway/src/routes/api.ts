@@ -291,6 +291,7 @@ export function createApiRouter(
     instagram_capture: z.enum(["enabled", "disabled"]).optional(),
     whatsapp_groups: z.string().optional(),
     url: z.string().optional(),
+    active: z.boolean().optional(),
   });
 
   api.put("/contacts/:id", async (req: Request, res: Response) => {
