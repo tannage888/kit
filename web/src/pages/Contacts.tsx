@@ -16,6 +16,7 @@ interface Contact {
   linkedin_capture: string;
   instagram_username: string | null;
   instagram_capture: string;
+  active: boolean;
 }
 
 function computeNextAction(lastContact: string, frequencyDays: number): string {
@@ -36,6 +37,7 @@ export default function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -48,16 +50,34 @@ export default function Contacts() {
   if (loading) return <p>Loading contacts…</p>;
   if (error) return <p style={{ color: '#f87171' }}>Error: {error}</p>;
 
-  const sorted = [...contacts].sort((a, b) => {
+  const visible = showInactive ? contacts : contacts.filter((c) => c.active !== false);
+  const sorted = [...visible].sort((a, b) => {
+    if (a.active !== false && b.active === false) return -1;
+    if (a.active === false && b.active !== false) return 1;
     const na = computeNextAction(a.last_contact, a.frequency_days);
     const nb = computeNextAction(b.last_contact, b.frequency_days);
     return na.localeCompare(nb);
   });
 
+  const inactiveCount = contacts.filter((c) => c.active === false).length;
+
   return (
     <div>
-      <h1>Contacts</h1>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1rem' }}>
+        <h1 style={{ margin: 0 }}>Contacts</h1>
+        {inactiveCount > 0 && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#a0a0b0', fontSize: '0.85rem' }}>
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+              style={{ accentColor: '#7c6fcd' }}
+            />
+            Show inactive ({inactiveCount})
+          </label>
+        )}
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid #333', textAlign: 'left', color: '#a0a0b0' }}>
             <th style={{ padding: '0.5rem 1rem 0.5rem 0' }}>Name</th>
@@ -78,6 +98,7 @@ export default function Contacts() {
                   borderBottom: '1px solid #222',
                   cursor: 'pointer',
                   transition: 'background 0.1s',
+                  opacity: c.active === false ? 0.45 : 1,
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = '#1e1e30')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}

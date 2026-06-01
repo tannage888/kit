@@ -21,6 +21,7 @@ interface Contact {
   sensitive_topics: string | null;
   notes: string | null;
   url: string | null;
+  active: boolean;
 }
 
 interface Interaction {
@@ -60,6 +61,7 @@ interface FormState {
   instagram_username: string;
   instagram_capture: string;
   selectedGroups: string[];
+  active: boolean;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -122,6 +124,7 @@ export default function ContactDetail() {
         instagram_username: found.instagram_username ?? '',
         instagram_capture: found.instagram_capture ?? 'disabled',
         selectedGroups: [],
+        active: found.active ?? true,
       });
     }).catch((e) => setError(e.message));
   }, [id]);
@@ -168,6 +171,7 @@ export default function ContactDetail() {
       if (form.selectedGroups.length > 0) {
         payload.whatsapp_groups = form.selectedGroups.join(',');
       }
+      payload.active = form.active;
       await api.put(`/api/contacts/${id}`, payload);
       setSaveMsg('Saved');
     } catch (e: unknown) {
@@ -195,7 +199,7 @@ export default function ContactDetail() {
         ← Back
       </button>
 
-      <h1 style={{ marginBottom: '1rem' }}>{contact.name}</h1>
+      <h1 style={{ marginBottom: '1rem', color: '#e0e0e0' }}>{contact.name}</h1>
 
       <div style={{ marginBottom: '1.5rem' }}>
         <button style={tabBtn('profile')} onClick={() => setTab('profile')}>Profile</button>
@@ -355,6 +359,18 @@ export default function ContactDetail() {
           )}
         </Field>
       )}
+
+      <Field label="Status">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', color: '#e0e0e0', fontSize: '0.9rem' }}>
+          <input
+            type="checkbox"
+            checked={form.active}
+            onChange={(e) => set('active', e.target.checked)}
+            style={{ accentColor: '#7c6fcd', width: 16, height: 16 }}
+          />
+          Active {!form.active && <span style={{ color: '#f87171', fontSize: '0.8rem' }}>(inactive — hidden from check-ins and sweep)</span>}
+        </label>
+      </Field>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
         <button
