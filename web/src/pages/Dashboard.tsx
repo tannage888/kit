@@ -9,6 +9,7 @@ interface Contact {
   tier: number;
   last_contact: string;
   frequency_days: number;
+  active: boolean;
 }
 
 const ENERGY_COLORS: Record<EnergyLevel, string> = {
@@ -65,6 +66,7 @@ export default function Dashboard() {
 
   const todaysContacts = contacts
     .filter((c) => {
+      if (c.active === false) return false;
       const next = computeNextAction(c.last_contact, c.frequency_days);
       return next && next <= today;
     })
