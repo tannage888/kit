@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 
 type EnergyLevel = 'high' | 'medium' | 'low';
@@ -34,6 +35,7 @@ function tierLabel(tier: number) {
 
 export default function Dashboard() {
   const today = new Date().toISOString().slice(0, 10);
+  const navigate = useNavigate();
 
   const [energy, setEnergy] = useState<EnergyLevel | null>(null);
   const [energyLoading, setEnergyLoading] = useState(true);
@@ -144,7 +146,13 @@ export default function Dashboard() {
                 const next = computeNextAction(c.last_contact, c.frequency_days);
                 const overdue = next < today;
                 return (
-                  <tr key={c.id} style={{ borderBottom: '1px solid #1a1a2e' }}>
+                  <tr
+                key={c.id}
+                onClick={() => navigate(`/contacts/${c.id}`)}
+                style={{ borderBottom: '1px solid #1a1a2e', cursor: 'pointer' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#1e1e30')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
                     <td style={{ padding: '0.55rem 1rem 0.55rem 0', fontWeight: 500 }}>{c.name}</td>
                     <td style={{ padding: '0.55rem 1rem 0.55rem 0', color: '#a0a0b0' }}>{tierLabel(c.tier)}</td>
                     <td style={{ padding: '0.55rem 0', color: overdue ? '#f87171' : '#4ade80' }}>
