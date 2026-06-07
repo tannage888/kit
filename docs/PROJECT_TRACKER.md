@@ -425,7 +425,41 @@ stages:
       - icon_design (placeholder icons are fine to ship, user replaces later)
       - public_domain_not_yet_decided
 
-next_actions: []
+web_ui_status:
+  last_updated: 2026-06-07
+  merged_prs:
+    - pr: 1  note: "sweep activity report, gap warnings, daemon pin, contract tests"
+    - pr: 3  note: "group chat sweeping + Supabase source of truth"
+    - pr: 4  note: "chat window (POST /api/chat with 18 Kit tools) + contact History tab"
+    - pr: 5  note: "chat moved to fixed right-side drawer panel (Maestro-style)"
+    - pr: 6  note: "fix schema('kit') on GET /api/contacts/:id"
+    - pr: 7  note: "fix contact name colour, active toggle, inactive filter"
+    - pr: 8  note: "exclude inactive contacts from dashboard"
+    - pr: 9  note: "add active field to TrackedContact and contacts SELECT"
+    - pr: 10 note: "clickable contacts on dashboard"
+    - pr: 11 note: "left-justify all text (body)"
+    - pr: 12 note: "left-justify #root (Vite scaffold had text-align:center)"
+    - pr: 13 note: "4-column layout — nav, contacts, detail, chat always visible"
+    - pr: 14 note: "widen main content area (nav 130px, contacts 200px, chat 300px)"
+    - pr: 15 note: "set main area to 800px"
+    - pr: 16 note: "fix layout overflow — grid-template-columns 100px 160px 1fr 240px"
+    - pr: 17 note: "Groups page, pre-fill selectedGroups from whatsapp_groups, contacts panel live-refresh on save"
+  in_progress: []
+next_actions:
+  - label: phone-access
+    summary: >
+      Expose the Kit web UI (localhost:3141) remotely via a permanent Cloudflare
+      Tunnel so it can be reached from phone or any device. Requires a free
+      Cloudflare account, a named tunnel config, and a pm2 entry to keep the
+      tunnel running alongside the gateway. The chat panel and full web UI should
+      be usable on mobile without any code changes.
+    notes: >
+      Claude mobile app does not support MCP; the web chat panel (POST /api/chat)
+      is the phone-friendly path. Temporary URL via `cloudflared tunnel --url
+      http://localhost:3141` works today without an account — permanent URL needs
+      a named tunnel and a Cloudflare account.
+    phase: 2
+    status: queued
 blockers: []
 human_tasks:
   - id: instagram_auth
