@@ -39,21 +39,15 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 export default function ChatPanel() {
-  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, activeTool]);
-
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
 
   async function send() {
     const text = input.trim();
@@ -94,82 +88,60 @@ export default function ChatPanel() {
   }
 
   return (
-    <>
-      {/* Vertical tab handle */}
-      <button
-        className="chat-handle"
-        onClick={() => setOpen((o) => !o)}
-        title={open ? 'Close chat' : 'Open chat'}
-        style={{ right: open ? 400 : 0 }}
-      >
-        Chat
-      </button>
-
-      {/* Sliding panel */}
-      <div className={`chat-panel${open ? ' open' : ''}`}>
-        <div className="chat-panel-header">
-          <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Kit</span>
-          <button
-            onClick={() => setMessages([])}
-            title="Clear conversation"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', fontSize: '0.8rem', marginLeft: 'auto' }}
-          >
-            Clear
-          </button>
-          <button
-            onClick={() => setOpen(false)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', fontSize: '1.1rem', lineHeight: 1 }}
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="chat-panel-messages">
-          {messages.length === 0 && (
-            <p style={{ color: '#444', fontSize: '0.82rem', padding: '0.5rem 0' }}>
-              Ask anything — "who should I reach out to?", "log I spoke to Peter", "prep me for Alice"
-            </p>
-          )}
-
-          {messages.map((msg, i) => (
-            <div key={i} className={`chat-bubble chat-bubble-${msg.role}`}>
-              {msg.content}
-            </div>
-          ))}
-
-          {activeTool && (
-            <div className="chat-tool-indicator">
-              🔧 {activeTool}…
-            </div>
-          )}
-
-          {loading && !activeTool && (
-            <div className="chat-tool-indicator">…</div>
-          )}
-
-          <div ref={bottomRef} />
-        </div>
-
-        <div className="chat-panel-input">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder="Message Kit… (Enter to send)"
-            disabled={loading}
-            rows={2}
-            className="chat-textarea"
-          />
-          <button
-            onClick={send}
-            disabled={loading || !input.trim()}
-            className="chat-send-btn"
-          >
-            Send
-          </button>
-        </div>
+    <div className="chat-column">
+      <div className="chat-panel-header">
+        <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Chat</span>
+        <button
+          onClick={() => setMessages([])}
+          title="Clear conversation"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', fontSize: '0.8rem', marginLeft: 'auto' }}
+        >
+          Clear
+        </button>
       </div>
-    </>
+
+      <div className="chat-panel-messages">
+        {messages.length === 0 && (
+          <p style={{ color: '#444', fontSize: '0.82rem', padding: '0.5rem 0' }}>
+            Ask anything — "who should I reach out to?", "log I spoke to Peter", "prep me for Alice"
+          </p>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} className={`chat-bubble chat-bubble-${msg.role}`}>
+            {msg.content}
+          </div>
+        ))}
+
+        {activeTool && (
+          <div className="chat-tool-indicator">🔧 {activeTool}…</div>
+        )}
+
+        {loading && !activeTool && (
+          <div className="chat-tool-indicator">…</div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="chat-panel-input">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Message Kit… (Enter to send)"
+          disabled={loading}
+          rows={2}
+          className="chat-textarea"
+        />
+        <button
+          onClick={send}
+          disabled={loading || !input.trim()}
+          className="chat-send-btn"
+        >
+          Send
+        </button>
+      </div>
+    </div>
   );
 }

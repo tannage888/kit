@@ -192,13 +192,6 @@ export default function ContactDetail() {
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <button
-        onClick={() => navigate('/contacts')}
-        style={{ color: '#a0a0b0', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '1.25rem', fontSize: '0.9rem' }}
-      >
-        ← Back
-      </button>
-
       <h1 style={{ marginBottom: '1rem', color: '#e0e0e0' }}>{contact.name}</h1>
 
       <div style={{ marginBottom: '1.5rem' }}>
