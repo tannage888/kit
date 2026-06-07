@@ -13,7 +13,7 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 100px 200px 1fr 340px;
+  grid-template-columns: 100px 200px 1fr 480px;
   min-height: 100vh;
   height: 100vh;
   overflow: hidden;
