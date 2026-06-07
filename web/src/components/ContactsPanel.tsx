@@ -26,10 +26,16 @@ export default function ContactsPanel() {
   const selectedId = match?.params.id ?? null;
   const today = new Date().toISOString().slice(0, 10);
 
-  useEffect(() => {
+  function loadContacts() {
     api.get<Contact[]>('/api/contacts').then((all) =>
       setContacts(all.filter((c) => c.active !== false))
     );
+  }
+
+  useEffect(() => {
+    loadContacts();
+    window.addEventListener('kit:contact-updated', loadContacts);
+    return () => window.removeEventListener('kit:contact-updated', loadContacts);
   }, []);
 
   const sorted = [...contacts].sort((a, b) => {

@@ -22,6 +22,7 @@ interface Contact {
   notes: string | null;
   url: string | null;
   active: boolean;
+  whatsapp_groups: string | null;
 }
 
 interface Interaction {
@@ -123,7 +124,9 @@ export default function ContactDetail() {
         linkedin_capture: found.linkedin_capture ?? 'disabled',
         instagram_username: found.instagram_username ?? '',
         instagram_capture: found.instagram_capture ?? 'disabled',
-        selectedGroups: [],
+        selectedGroups: found.whatsapp_groups
+          ? found.whatsapp_groups.split(',').map((j) => j.trim()).filter(Boolean)
+          : [],
         active: found.active ?? true,
       });
     }).catch((e) => setError(e.message));
@@ -174,6 +177,7 @@ export default function ContactDetail() {
       payload.active = form.active;
       await api.put(`/api/contacts/${id}`, payload);
       setSaveMsg('Saved');
+      window.dispatchEvent(new CustomEvent('kit:contact-updated'));
     } catch (e: unknown) {
       setSaveMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
