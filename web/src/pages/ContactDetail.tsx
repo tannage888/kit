@@ -195,7 +195,7 @@ export default function ContactDetail() {
   });
 
   return (
-    <div style={{ maxWidth: 560 }}>
+    <div style={{ maxWidth: 820 }}>
       <h1 style={{ marginBottom: '1rem', color: '#e0e0e0' }}>{contact.name}</h1>
 
       <div style={{ marginBottom: '1.5rem' }}>
