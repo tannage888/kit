@@ -8,6 +8,7 @@ body {
   font-family: system-ui, sans-serif;
   background: #0f0f1a;
   color: #e0e0e0;
+  text-align: left;
 }
 
 .layout {
