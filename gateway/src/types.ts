@@ -27,6 +27,7 @@ export interface TrackedContact {
   instagram_capture: "enabled" | "disabled";
   whatsapp_groups: string | null; // comma-separated group JIDs
   url: string | null;
+  active: boolean;
 }
 
 // ── Message types ──────────────────────────────────────────

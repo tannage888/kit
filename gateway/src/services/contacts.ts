@@ -34,7 +34,7 @@ export class ContactRegistry {
     const { data, error } = await this.supabase
       .schema("kit")
       .from("contacts")
-      .select("id, name, whatsapp, tier, wa_capture, frequency, frequency_days, last_contact, whatsapp_capture, linkedin_username, linkedin_capture, instagram_username, instagram_capture, whatsapp_groups, url");
+      .select("id, name, whatsapp, tier, wa_capture, frequency, frequency_days, last_contact, whatsapp_capture, linkedin_username, linkedin_capture, instagram_username, instagram_capture, whatsapp_groups, url, active");
 
     if (error) {
       console.error("❌ Failed to load contacts from Supabase:", error.message);
@@ -63,6 +63,7 @@ export class ContactRegistry {
         instagram_capture: row.instagram_capture === "enabled" ? "enabled" : "disabled",
         whatsapp_groups: row.whatsapp_groups ?? null,
         url: row.url ?? null,
+        active: row.active ?? true,
       };
       this.register(contact);
     }
