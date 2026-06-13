@@ -2,10 +2,10 @@
 project: kit
 display_name: "Kit — Relationship Manager"
 owner: seang
-status: done
+status: active
 priority: 2
 created: 2026-04-01
-last_reviewed: 2026-05-16
+last_reviewed: 2026-06-13
 
 permissions: bypassPermissions
 max_concurrent_agents: 1
@@ -14,7 +14,7 @@ shared_resources:
   - port_3141
   - port_3142
 
-current_stage: supabase-source-of-truth-backfill
+current_stage: kit-memories
 
 daemon_pin:
   repo: C:\dev\claude_whatsapp_integration
@@ -111,6 +111,132 @@ stages:
     needs_human_for:
       - supabase_realtime_not_firing_in_dev
       - people_directory_path_resolution_errors
+
+  kit-memories:
+    model: sonnet
+    loop: ralph
+    max_iterations: 8
+    prompt: |
+      Add a persistent memory system to the Kit gateway at C:\dev\kit using pgvector
+      and Supabase's built-in gte-small embedding model.
+
+      ## Context
+      Kit's web chat panel (POST /api/chat) currently uses a bare system prompt with no
+      memory of past conversations or learned facts. This stage adds a kit.memories table
+      to Supabase, a Supabase Edge Function for generating embeddings via gte-small (free,
+      no external API needed), a MemoryStore service in the gateway, and wires it into the
+      chat pipeline so the assistant gets smarter over time.
+
+      The Supabase project is popxesemindihcbedegy (same project used for kit and open-brain).
+      The gateway is at C:\dev\kit\gateway. Apply all Supabase changes via the Supabase MCP.
+
+      ## Step 1 — Supabase migration
+      Apply via MCP (project_id: popxesemindihcbedegy):
+
+        CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+
+        CREATE TABLE IF NOT EXISTS kit.memories (
+          id          uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+          contact_id  text        REFERENCES kit.contacts(id) ON DELETE CASCADE,
+          category    text        NOT NULL CHECK (category IN (
+                        'contact_fact', 'life_event', 'preference', 'interaction_insight')),
+          content     text        NOT NULL,
+          source      text        NOT NULL CHECK (source IN ('chat', 'sweep', 'manual')),
+          embedding   extensions.vector(384),
+          created_at  timestamptz DEFAULT now()
+        );
+
+        CREATE INDEX IF NOT EXISTS memories_embedding_idx
+          ON kit.memories USING ivfflat (embedding extensions.vector_cosine_ops)
+          WITH (lists = 100);
+        CREATE INDEX IF NOT EXISTS memories_contact_idx ON kit.memories (contact_id);
+        CREATE INDEX IF NOT EXISTS memories_category_idx ON kit.memories (category);
+
+      Verify: query information_schema.columns for kit.memories and confirm embedding column exists.
+
+      ## Step 2 — Supabase Edge Function: embed
+      Deploy function named "kit-embed" to project popxesemindihcbedegy (verify_jwt: false —
+      called server-side from the gateway with the service key).
+
+        import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+        const session = new Supabase.ai.Session('gte-small');
+
+        Deno.serve(async (req: Request) => {
+          const { texts } = await req.json();
+          const embeddings = await Promise.all(
+            (texts as string[]).map((t: string) =>
+              session.run(t, { mean_pool: true, normalize: true })
+            )
+          );
+          return new Response(JSON.stringify({ embeddings }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        });
+
+      Verify: invoke with { texts: ["hello world"] } and confirm response is array of 384 numbers.
+
+      ## Step 3 — Gateway MemoryStore service
+      Create gateway/src/services/memory-store.ts:
+
+      - Constructor takes supabaseClient and supabaseUrl + serviceKey (for Edge Function call)
+      - remember(content, category, source, contactId?): Promise<void>
+        Calls kit-embed Edge Function to get embedding, inserts row into kit.memories
+      - search(query, opts?: { contactId?: string; limit?: number }): Promise<Memory[]>
+        Embeds the query, runs cosine similarity search:
+          SELECT id, contact_id, category, content, source, created_at,
+                 1 - (embedding <=> $1::vector) AS similarity
+          FROM kit.memories
+          WHERE ($2::text IS NULL OR contact_id = $2)
+          ORDER BY embedding <=> $1::vector
+          LIMIT $3
+        Returns rows with similarity > 0.5 only.
+      - Export interface Memory { id, contactId, category, content, source, similarity, createdAt }
+
+      Add unit tests in gateway/src/services/memory-store.test.ts.
+      Run npm test in C:\dev\kit\gateway — all existing tests must stay green.
+
+      ## Step 4 — Wire into /api/chat: system prompt enrichment (read)
+      In gateway/src/routes/api.ts, in the POST /api/chat handler:
+      - Before the Anthropic API call, call memoryStore.search(lastUserMessage, { limit: 6 })
+      - Also if any contact name is mentioned in the message, call
+        memoryStore.search(lastUserMessage, { contactId, limit: 4 }) for that contact
+      - Prepend results to the system prompt as:
+          ## What Kit remembers
+          - [category] content (source, date)
+          ...
+      - If no memories found, omit the section entirely (don't add empty block)
+
+      ## Step 5 — Wire into /api/chat: memory capture (write)
+      After each successful assistant response turn:
+      - Make a second fast Claude call (haiku, max_tokens: 256) with prompt:
+          "Extract new facts about the user or their contacts from this exchange.
+           Output one fact per line as: [category]|[contact_name or 'user']|fact
+           Only extract genuinely new information. If nothing new, output NONE."
+      - Parse the response, look up contact_id from name if needed, call remember() for each fact
+      - Do this asynchronously — do not await it before returning the chat response
+
+      ## Step 6 — REST endpoints for Claude Code access
+      Add to gateway/src/routes/api.ts:
+      - POST /api/memories  body: { content, category, source, contactId? }
+        Calls memoryStore.remember() and returns { ok: true }
+      - GET /api/memories/search?q=...&contactId=...&limit=...
+        Calls memoryStore.search() and returns the Memory array
+
+      ## Final checks
+      Run npm test in C:\dev\kit\gateway — must exit 0.
+      Run npm run build in C:\dev\kit\web — must exit 0.
+      Commit all gateway changes. Do not commit .env or People/.
+
+    success_criteria: |
+      npm test in C:\dev\kit\gateway exits 0.
+      kit.memories table exists with embedding vector(384) column.
+      kit-embed Edge Function returns 384-dim array for test input.
+      POST /api/chat response improves when a relevant memory exists.
+      POST /api/memories stores a row; GET /api/memories/search retrieves it.
+    needs_human_for:
+      - supabase_edge_function_cold_start_errors
+      - pgvector_ivfflat_index_requires_rows_before_querying
 
   group-sweep:
     model: sonnet
