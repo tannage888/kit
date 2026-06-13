@@ -426,7 +426,7 @@ stages:
       - public_domain_not_yet_decided
 
 web_ui_status:
-  last_updated: 2026-06-07
+  last_updated: 2026-06-13
   merged_prs:
     - pr: 1  note: "sweep activity report, gap warnings, daemon pin, contract tests"
     - pr: 3  note: "group chat sweeping + Supabase source of truth"
@@ -444,21 +444,52 @@ web_ui_status:
     - pr: 15 note: "set main area to 800px"
     - pr: 16 note: "fix layout overflow — grid-template-columns 100px 160px 1fr 240px"
     - pr: 17 note: "Groups page, pre-fill selectedGroups from whatsapp_groups, contacts panel live-refresh on save"
+    - pr: 18 note: "widen chat column 340px→480px, ContactDetail maxWidth 560→820px"
+    - pr: 19 note: "remove 1126px #root width cap — app now spans full viewport"
+    - pr: 20 note: "widen contacts panel column 140px→200px"
+    - pr: 21 note: "widen chat column 340px→480px"
   in_progress: []
+
 next_actions:
+  - label: kit-memories
+    summary: >
+      Add a kit.memories table (pgvector, gte-small embeddings via Supabase Edge Function)
+      so the web chat builds up a persistent memory of contacts and the user's life.
+      Web chat reads and writes automatically. Claude Code uses its own memory files
+      by default; can query kit.memories on request via GET /api/memories/search.
+    steps:
+      - Supabase migration: enable pgvector, create kit.memories (id, contact_id, category, content, source, embedding vector(384), created_at)
+      - Deploy Edge Function embed — Supabase gte-small, takes texts[], returns embeddings[]
+      - Gateway MemoryStore service — remember() and search() methods
+      - Wire search into /api/chat system prompt enrichment (read before Claude call)
+      - Wire capture into /api/chat response (extract + store new facts after each turn)
+      - Add POST /api/memories and GET /api/memories/search for Claude Code access
+    verification:
+      - pgvector enabled + kit.memories columns confirmed via SQL
+      - embed Edge Function returns 384-dim vector for test input
+      - MemoryStore unit tests green, npm test passes
+      - Chat: store "Mark works at Corgi", ask "where does Mark work?" — response mentions Corgi
+      - Chat: say "I got a dog", query kit.memories — row with source=chat appears
+    phase: 3
+    status: queued
+
   - label: phone-access
     summary: >
-      Expose the Kit web UI (localhost:3141) remotely via a permanent Cloudflare
-      Tunnel so it can be reached from phone or any device. Requires a free
-      Cloudflare account, a named tunnel config, and a pm2 entry to keep the
-      tunnel running alongside the gateway. The chat panel and full web UI should
-      be usable on mobile without any code changes.
-    notes: >
-      Claude mobile app does not support MCP; the web chat panel (POST /api/chat)
-      is the phone-friendly path. Temporary URL via `cloudflared tunnel --url
-      http://localhost:3141` works today without an account — permanent URL needs
-      a named tunnel and a Cloudflare account.
-    phase: 2
+      Two parts: (A) Cloudflare Tunnel — human task, exposes localhost:3141 at a
+      permanent HTTPS URL with Cloudflare Access (Google login gate). (B) PWA —
+      manifest.json, vite-plugin-pwa service worker, iOS meta tags, mobile UX pass.
+      Result: install Kit from browser on any device, opens full-screen like a native app.
+    steps:
+      - "[human] Install cloudflared, create named tunnel → localhost:3141, add pm2 entry"
+      - "[human] Configure Cloudflare Access (Google login gate)"
+      - "web/public/manifest.json + icons (192, 512, 180px)"
+      - "vite-plugin-pwa + workbox NetworkFirst for /api/*"
+      - "index.html meta tags for iOS standalone install"
+      - "Mobile UX pass: 44px touch targets, no overflow at 390px"
+    needs_human_for:
+      - cloudflare_tunnel_setup
+      - domain_name_decision
+    phase: 3
     status: queued
 blockers: []
 human_tasks:
