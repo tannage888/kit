@@ -238,6 +238,74 @@ stages:
       - supabase_edge_function_cold_start_errors
       - pgvector_ivfflat_index_requires_rows_before_querying
 
+  kit-send:
+    model: sonnet
+    loop: ralph
+    max_iterations: 6
+    prompt: |
+      Add WhatsApp send capability to the Kit gateway and web UI at C:\dev\kit.
+
+      ## Context
+      The WhatsApp daemon at C:\dev\claude_whatsapp_integration already has a working
+      POST /api/send endpoint (port 3142) that accepts:
+        { "messages": [{ "to": "+447700900123", "text": "Hey!" }] }
+      and returns { results: [{ to, status, messageId }] }.
+
+      The gateway (port 3141) deliberately omitted this in v0. This stage adds it back
+      as a proxied gateway endpoint, exposes it as a chat tool, and adds a Send button
+      to the contact detail page in the web UI with a confirm-before-send step.
+
+      ## Step 1 — Gateway proxy: POST /api/send
+      In gateway/src/routes/api.ts, add a proxy route following the same pattern as
+      the existing GET /api/groups proxy:
+      - POST /api/send
+      - Body: { to: string (E.164), text: string }
+      - Validates with zod: to must match /^\+[1-9]\d{6,14}$/, text must be non-empty string
+      - Proxies to http://localhost:3142/api/send as { messages: [{ to, text }] }
+      - Returns { ok: true, messageId } on success
+      - Returns 503 if daemon returns whatsapp_not_initialised
+      - Returns 502 for other daemon errors
+
+      ## Step 2 — Chat tool: kit-send-message
+      In the CHAT_TOOLS array and the tool handler switch in gateway/src/routes/api.ts:
+      - Add tool: name "kit-send-message", description "Send a WhatsApp message to a contact.",
+        input_schema: { contact_name: string, text: string }
+      - Handler: look up contact by name in the registry, get their whatsapp number,
+        POST to /api/send internally, return { ok, messageId } or clear error message
+      - If contact has no WhatsApp number, return an error — do not attempt to send
+      - If daemon is not connected, return a clear error message
+
+      ## Step 3 — Web UI: Send button on ContactDetail
+      In web/src/pages/ContactDetail.tsx:
+      - Add a "Send Message" section below the Save button, only shown if contact.whatsapp is set
+      - Textarea for composing the message (pre-populated if a draft is passed via location state)
+      - "Send via WhatsApp" button — disabled while sending
+      - Confirm step: clicking Send shows an inline confirmation "Send to [name] on WhatsApp?" 
+        with Confirm / Cancel buttons before actually calling POST /api/send
+      - On success: show "Sent ✓" and clear the textarea
+      - On error: show the error message in red
+
+      Add api.post() to web/src/api/client.ts if not already present (it is).
+
+      ## Step 4 — Tests
+      Add tests in gateway/src/routes/api.test.ts (or a new send.test.ts) covering:
+      - POST /api/send with valid body proxies to daemon and returns messageId
+      - POST /api/send with missing/invalid E.164 returns 400
+      - POST /api/send when daemon returns 503 returns 503
+
+      Run npm test in C:\dev\kit\gateway — all tests must pass.
+      Run npm run build in C:\dev\kit\web — must exit 0.
+
+    success_criteria: |
+      npm test in C:\dev\kit\gateway exits 0.
+      npm run build in C:\dev\kit\web exits 0.
+      POST /api/send on the gateway proxies to the daemon and returns a messageId.
+      kit-send-message tool exists in the CHAT_TOOLS list.
+      ContactDetail shows a Send section with confirm step when contact has a WhatsApp number.
+    needs_human_for:
+      - daemon_not_connected (Baileys session expired — user must re-pair)
+      - send_failures_due_to_rate_limiting
+
   group-sweep:
     model: sonnet
     loop: ralph
