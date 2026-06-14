@@ -223,28 +223,36 @@ stages:
       - GET /api/memories/search?q=...&contactId=...&limit=...
         Calls memoryStore.search() and returns the Memory array
 
-      ## Step 7 — Open Brain search endpoint
+      ## Step 7 — Open Brain search endpoint (optional feature)
+      Open Brain is personal infrastructure — disabled by default, enabled only when
+      OPEN_BRAIN_URL is present in .env. This allows the feature to be turned off
+      simply by removing the env var, and ensures new users who have no Open Brain
+      instance are unaffected.
+
+      In gateway/src/index.ts (or config):
+      - Add: const OPEN_BRAIN_ENABLED = Boolean(process.env.OPEN_BRAIN_URL)
+      - Export this flag so routes and services can check it
+
       Add to gateway/src/routes/api.ts:
       - GET /api/openbrain/search?q=...&limit=...
-        Queries the Open Brain thoughts table in Supabase (same project — use OPEN_BRAIN_URL
-        and OPEN_BRAIN_SERVICE_KEY from .env). First check the actual column structure of
-        the thoughts table via Supabase MCP before implementing.
-        If the thoughts table has an embedding column: embed the query via kit-embed Edge
-        Function then run cosine similarity search.
+        If !OPEN_BRAIN_ENABLED: return { results: [], enabled: false } immediately
+        Otherwise: query the Open Brain thoughts table (OPEN_BRAIN_URL + OPEN_BRAIN_SERVICE_KEY).
+        First check the actual column structure of the thoughts table via Supabase MCP.
+        If embedding column exists: embed query via kit-embed, run cosine similarity search.
         If no embedding column: fall back to Postgres full-text search on content column.
-        Returns array of { id, content, createdAt, similarity? }.
-      - This endpoint is the bridge for Claude Code sessions — when drafting messages,
-        Claude Code queries both GET /api/memories/search AND GET /api/openbrain/search
-        to assemble full context before composing.
+        Returns { results: [{ id, content, createdAt, similarity? }], enabled: true }
+      - GET /api/openbrain/status
+        Returns { enabled: OPEN_BRAIN_ENABLED } — lets Claude Code and the web UI know
+        whether Open Brain is wired up without making a search call
 
-      ## Step 8 — Include Open Brain in chat system prompt
-      In the POST /api/chat handler, alongside the kit.memories enrichment (Step 4):
-      - Also call GET /api/openbrain/search with the user's message (limit 4)
-      - Append results under a separate heading in the system prompt:
+      ## Step 8 — Include Open Brain in chat system prompt (guarded)
+      In the POST /api/chat handler:
+      - Only query /api/openbrain/search if OPEN_BRAIN_ENABLED is true
+      - If results exist and similarity > 0.4, append under system prompt heading:
           ## From Open Brain (raw captures)
           - content (date)
           ...
-      - Only add the section if results exist and similarity > 0.4
+      - If OPEN_BRAIN_ENABLED is false, skip entirely — no empty section, no error
 
       ## Final checks
       Run npm test in C:\dev\kit\gateway — must exit 0.
