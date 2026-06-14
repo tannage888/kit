@@ -14,7 +14,7 @@ shared_resources:
   - port_3141
   - port_3142
 
-current_stage: kit-memories
+current_stage: kit-send
 
 daemon_pin:
   repo: C:\dev\claude_whatsapp_integration
