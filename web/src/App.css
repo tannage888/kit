@@ -90,6 +90,7 @@ h1 {
 
 .btn {
   padding: 0.4rem 1rem;
+  min-height: 44px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -269,3 +270,55 @@ h1 {
   flex-shrink: 0;
 }
 .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Mobile responsive (PWA) ───── */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    height: auto;
+    min-height: 100svh;
+    overflow: visible;
+  }
+
+  /* Hide desktop-only panels on mobile */
+  .contacts-panel,
+  .chat-column {
+    display: none;
+  }
+
+  .content {
+    border-left: none;
+    padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  /* Sidebar becomes horizontal bottom nav */
+  .chat-panel-input {
+    padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
+  }
+
+  /* Ensure all buttons meet 44px touch target */
+  button {
+    min-height: 44px;
+  }
+
+  .btn {
+    min-height: 44px;
+    padding: 0.6rem 1.2rem;
+    width: 100%;
+  }
+
+  .contact-row {
+    padding: 0.75rem 0.9rem;
+    min-height: 44px;
+  }
+
+  /* Prevent text from being too small on mobile */
+  .contact-row-name { font-size: 1rem; }
+  .sweep-table { font-size: 0.85rem; }
+}

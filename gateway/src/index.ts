@@ -70,8 +70,15 @@ async function main() {
   // ── 5. Start REST API ──────────────────────────────────
 
   const app = express();
+  const allowedOrigins = new Set([
+    "http://localhost:3143",
+    ...(process.env.PUBLIC_URL ? [process.env.PUBLIC_URL] : []),
+  ]);
   app.use((_req, res, next) => {
-    res.setHeader("Access-Control-Allow-Origin", "http://localhost:3143");
+    const origin = _req.headers.origin ?? "";
+    if (allowedOrigins.has(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
     if (_req.method === "OPTIONS") { res.sendStatus(204); return; }
