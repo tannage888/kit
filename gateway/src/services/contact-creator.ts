@@ -19,6 +19,7 @@ import { fileURLToPath } from "url";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
 import { ContactRegistry } from "./contacts.js";
+import { generateContactFile, type ContactRow } from "../utils/markdown.js";
 import type { CaptureMode } from "../types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,18 +31,6 @@ const TIER_FOLDER: Record<number, string> = {
   1: "1 - Inner Circle",
   2: "2 - Active",
   3: "3 - Business Contact",
-};
-
-const TIER_RELATIONSHIP: Record<number, string> = {
-  1: "1-Inner Circle",
-  2: "2-Active",
-  3: "3-Business Contact",
-};
-
-const TIER_TAG: Record<number, string> = {
-  1: "1-inner-circle",
-  2: "2-active",
-  3: "3-business-contact",
 };
 
 const FREQUENCY_DAYS: Record<string, number> = {
@@ -118,7 +107,33 @@ export class ContactCreator {
 
     // 2. Render markdown from the canonical Supabase record
     if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
-    fs.writeFileSync(filePath, buildMarkdown(input), "utf-8");
+    const contactRow: ContactRow = {
+      id,
+      name: input.name,
+      tier: input.tier,
+      frequency: input.frequency,
+      frequency_days,
+      last_contact: null,
+      next_action: null,
+      social_battery_cost: input.social_battery_cost ?? null,
+      origin_story: input.origin_story ?? null,
+      special_interests: null,
+      sensitive_topics: null,
+      preferred_channel: null,
+      birthday: null,
+      whatsapp_capture,
+      notes: input.notes ?? null,
+      whatsapp,
+      linkedin_username: null,
+      linkedin_capture: "disabled",
+      instagram_username: null,
+      instagram_capture: "disabled",
+      whatsapp_groups: null,
+      url: null,
+      wa_capture,
+      active: true,
+    };
+    fs.writeFileSync(filePath, generateContactFile(contactRow, [], []), "utf-8");
 
     // 3. Register in the live ContactRegistry so the contact is
     //    immediately usable (resolver, capture, sweep) without restart.
@@ -136,6 +151,9 @@ export class ContactCreator {
       linkedin_capture: "disabled",
       instagram_username: null,
       instagram_capture: "disabled",
+      whatsapp_groups: null,
+      url: null,
+      active: true,
     });
 
     const jid = whatsapp
@@ -144,49 +162,4 @@ export class ContactCreator {
 
     return { id, jid, filePath };
   }
-}
-
-function buildMarkdown(input: CreateContactInput): string {
-  const rel = TIER_RELATIONSHIP[input.tier];
-  const tag = TIER_TAG[input.tier];
-  const bg = input.origin_story ?? "<!-- Add background here -->";
-  const notes = input.notes ?? "<!-- Add notes here -->";
-
-  const optional: string[] = [];
-  if (input.whatsapp) optional.push(`whatsapp: "${input.whatsapp}"`);
-  if (input.social_battery_cost) optional.push(`social_battery: ${input.social_battery_cost}`);
-  if (input.whatsapp_capture) optional.push(`whatsapp_capture: ${input.whatsapp_capture}`);
-  if (input.wa_capture) optional.push(`wa_capture: ${input.wa_capture}`);
-  const optionalBlock = optional.length ? optional.join("\n") + "\n" : "";
-
-  return `---
-name: ${input.name}
-relationship: ${rel}
-frequency: ${input.frequency}
-last_contact:
-next_action:
-${optionalBlock}tags: [people, ${tag}]
----
-
-# ${input.name}
-
-## At a Glance
-
-**Relationship:** ${rel}
-**Contact Frequency:** ${input.frequency}
-**Last Contact:**
-**Next Action:**
-
-## Background
-
-${bg}
-
-## Notes
-
-${notes}
-
-## Interaction Log
-
-<!-- Add notes after each contact below -->
-`;
 }
