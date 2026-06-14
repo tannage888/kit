@@ -31,6 +31,8 @@ import { SyncService } from "./services/sync.js";
 
 const startedAt = Date.now();
 
+export const OPEN_BRAIN_ENABLED = Boolean(process.env.OPEN_BRAIN_URL);
+
 async function main() {
   console.log("╔══════════════════════════════════════╗");
   console.log("║    Kit Gateway v1.0.0                ║");

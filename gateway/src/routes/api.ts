@@ -26,6 +26,7 @@ import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
 import { parseContactFile } from "../utils/markdown.js";
 import type { CaptureMode, Channel, GatewayStatus, TrackedContact } from "../types.js";
 import { EnergyService } from "../services/energy.js";
+import { MemoryStore } from "../services/memory-store.js";
 // Lazy import — mcp/tools.ts calls requireEnv() at module load;
 // importing it lazily avoids failures in test environments where env vars aren't set.
 let _kitTools: typeof import("../mcp/tools.js") | null = null;
@@ -55,6 +56,8 @@ export function createApiRouter(
   const api = Router();
   const creator = new ContactCreator(contacts);
   const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
+  const memoryStore = new MemoryStore(supabase, config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
+  const OPEN_BRAIN_ENABLED = Boolean(config.OPEN_BRAIN_URL);
 
   // ── Health / status ──────────────────────────────────────
 
@@ -550,13 +553,76 @@ export function createApiRouter(
     if (!parsed.success) { res.status(400).json({ error: "invalid_body", details: parsed.error.issues }); return; }
 
     const today = new Date().toISOString().slice(0, 10);
+    const lastUserMessage = parsed.data.message;
+
+    // Step 4: enrich system prompt with memories before the Anthropic call
+    let memorySection = "";
+    try {
+      const generalMemories = await memoryStore.search(lastUserMessage, { limit: 6 });
+
+      // Check if any contact name is mentioned in the message
+      const allContacts = contacts.getAll();
+      const mentionedContact = allContacts.find((c) =>
+        lastUserMessage.toLowerCase().includes(c.name.toLowerCase())
+      );
+      let contactMemories: typeof generalMemories = [];
+      if (mentionedContact) {
+        contactMemories = await memoryStore.search(lastUserMessage, { contactId: mentionedContact.id, limit: 4 });
+      }
+
+      const combined = [...generalMemories, ...contactMemories.filter((cm) => !generalMemories.some((gm) => gm.id === cm.id))];
+      if (combined.length > 0) {
+        const lines = combined.map((m) => {
+          const date = m.createdAt.slice(0, 10);
+          return `- [${m.category}] ${m.content} (${m.source}, ${date})`;
+        });
+        memorySection = `\n\n## What Kit remembers\n${lines.join("\n")}`;
+      }
+    } catch {
+      // Non-fatal: proceed without memories if embed/search fails
+    }
+
+    // Step 8: include Open Brain results if enabled
+    let openBrainSection = "";
+    if (OPEN_BRAIN_ENABLED && config.OPEN_BRAIN_URL && config.OPEN_BRAIN_SERVICE_KEY) {
+      try {
+        const obSupabase = createClient(config.OPEN_BRAIN_URL, config.OPEN_BRAIN_SERVICE_KEY);
+        const [embedding] = await memoryStore["embed"]([lastUserMessage]);
+        const embeddingStr = `[${embedding.join(",")}]`;
+        const { data: obData } = await (obSupabase as any).rpc("match_thoughts", {
+          query_embedding: embeddingStr,
+          match_threshold: 0.4,
+          match_count: 5,
+        }).catch(() => ({ data: null }));
+
+        // Fallback: full-text search if rpc fails or returns nothing
+        let results: { id: string; content: string; created_at: string; similarity?: number }[] = obData ?? [];
+        if (results.length === 0) {
+          const { data: ftData } = await obSupabase
+            .from("thoughts")
+            .select("id, content, created_at")
+            .textSearch("content", lastUserMessage.split(" ").slice(0, 5).join(" & "), { type: "websearch" })
+            .limit(5);
+          results = ftData ?? [];
+        }
+
+        const filtered = results.filter((r) => !r.similarity || r.similarity > 0.4);
+        if (filtered.length > 0) {
+          const lines = filtered.map((r) => `- ${r.content} (${r.created_at.slice(0, 10)})`);
+          openBrainSection = `\n\n## From Open Brain (raw captures)\n${lines.join("\n")}`;
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+
     const systemPrompt = `You are Kit, a relationship management assistant for a neurodivergent user (autism/ADHD). You help them maintain relationships by tracking contacts, logging interactions, and surfacing who to reach out to.
 
-Today is ${today}. You have access to their contact database and WhatsApp history via tools. Use tools to answer questions accurately rather than guessing. Keep responses concise and practical.`;
+Today is ${today}. You have access to their contact database and WhatsApp history via tools. Use tools to answer questions accurately rather than guessing. Keep responses concise and practical.${memorySection}${openBrainSection}`;
 
     const messages: Anthropic.MessageParam[] = [
       ...(parsed.data.history ?? []).map((h) => ({ role: h.role, content: h.content })),
-      { role: "user", content: parsed.data.message },
+      { role: "user", content: lastUserMessage },
     ];
 
     const toolCalls: { name: string; input: Record<string, unknown>; result: string }[] = [];
@@ -596,9 +662,133 @@ Today is ${today}. You have access to their contact database and WhatsApp histor
         }
       }
 
+      // Step 5: async memory capture — extract new facts from this exchange
+      if (reply) {
+        const exchange = `User: ${lastUserMessage}\nAssistant: ${reply}`;
+        void (async () => {
+          try {
+            const extractResp = await anthropic.messages.create({
+              model: "claude-haiku-4-5-20251001",
+              max_tokens: 256,
+              messages: [{
+                role: "user",
+                content: `Extract new facts about the user or their contacts from this exchange.\nOutput one fact per line as: [category]|[contact_name or 'user']|fact\nCategories: contact_fact, life_event, preference, interaction_insight\nOnly extract genuinely new information. If nothing new, output NONE.\n\n${exchange}`,
+              }],
+            });
+            const text = extractResp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
+            if (text === "NONE" || !text) return;
+            for (const line of text.split("\n")) {
+              const parts = line.split("|");
+              if (parts.length < 3) continue;
+              const [rawCat, rawName, ...factParts] = parts;
+              const category = rawCat.replace(/[\[\]]/g, "").trim() as any;
+              const nameOrUser = rawName.trim();
+              const fact = factParts.join("|").trim();
+              if (!fact || !["contact_fact", "life_event", "preference", "interaction_insight"].includes(category)) continue;
+              let contactId: string | undefined;
+              if (nameOrUser !== "user") {
+                const found = contacts.getAll().find((c) => c.name.toLowerCase() === nameOrUser.toLowerCase());
+                if (found) contactId = found.id;
+              }
+              await memoryStore.remember(fact, category, "chat", contactId);
+            }
+          } catch {
+            // Non-fatal background task
+          }
+        })();
+      }
+
       res.json({ reply, tool_calls: toolCalls });
     } catch (err: any) {
       res.status(500).json({ error: "chat_failed", detail: err.message });
+    }
+  });
+
+  // ── Memories (Step 6) ───────────────────────────────────
+
+  const memorySchema = z.object({
+    content: z.string().min(1),
+    category: z.enum(["contact_fact", "life_event", "preference", "interaction_insight"]),
+    source: z.enum(["chat", "sweep", "manual"]),
+    contactId: z.string().optional(),
+  });
+
+  api.post("/memories", async (req: Request, res: Response) => {
+    const parsed = memorySchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "invalid_body", details: parsed.error.issues }); return; }
+    try {
+      await memoryStore.remember(parsed.data.content, parsed.data.category, parsed.data.source, parsed.data.contactId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "memory_store_failed", detail: err.message });
+    }
+  });
+
+  api.get("/memories/search", async (req: Request, res: Response) => {
+    const q = String(req.query["q"] ?? "").trim();
+    if (!q) { res.status(400).json({ error: "q_required" }); return; }
+    const contactId = req.query["contactId"] ? String(req.query["contactId"]) : undefined;
+    const limit = req.query["limit"] ? Number(req.query["limit"]) : 10;
+    try {
+      const results = await memoryStore.search(q, { contactId, limit });
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ error: "memory_search_failed", detail: err.message });
+    }
+  });
+
+  // ── Open Brain (Steps 7-8) ───────────────────────────────
+
+  api.get("/openbrain/status", (_req: Request, res: Response) => {
+    res.json({ enabled: OPEN_BRAIN_ENABLED });
+  });
+
+  api.get("/openbrain/search", async (req: Request, res: Response) => {
+    if (!OPEN_BRAIN_ENABLED || !config.OPEN_BRAIN_URL || !config.OPEN_BRAIN_SERVICE_KEY) {
+      res.json({ results: [], enabled: false });
+      return;
+    }
+    const q = String(req.query["q"] ?? "").trim();
+    if (!q) { res.status(400).json({ error: "q_required" }); return; }
+    const limit = req.query["limit"] ? Number(req.query["limit"]) : 10;
+    try {
+      const obSupabase = createClient(config.OPEN_BRAIN_URL, config.OPEN_BRAIN_SERVICE_KEY);
+      const [embedding] = await memoryStore["embed"]([q]);
+      const embeddingStr = `[${embedding.join(",")}]`;
+
+      // Try cosine similarity search first
+      const { data: vecData, error: vecError } = await (obSupabase as any).rpc("match_thoughts", {
+        query_embedding: embeddingStr,
+        match_threshold: 0.0,
+        match_count: limit,
+      });
+
+      let results: { id: string; content: string; createdAt: string; similarity?: number }[] = [];
+      if (!vecError && vecData && vecData.length > 0) {
+        results = (vecData as any[]).map((r) => ({
+          id: r.id,
+          content: r.content,
+          createdAt: r.created_at,
+          similarity: r.similarity,
+        }));
+      } else {
+        // Fallback: full-text search
+        const words = q.split(/\s+/).slice(0, 5).join(" & ");
+        const { data: ftData } = await obSupabase
+          .from("thoughts")
+          .select("id, content, created_at")
+          .textSearch("content", words, { type: "websearch" })
+          .limit(limit);
+        results = (ftData ?? []).map((r: any) => ({
+          id: r.id,
+          content: r.content,
+          createdAt: r.created_at,
+        }));
+      }
+
+      res.json({ results, enabled: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "openbrain_search_failed", detail: err.message });
     }
   });
 
