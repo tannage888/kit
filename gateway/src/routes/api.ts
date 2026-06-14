@@ -587,7 +587,7 @@ export function createApiRouter(
     if (OPEN_BRAIN_ENABLED && config.OPEN_BRAIN_URL && config.OPEN_BRAIN_SERVICE_KEY) {
       try {
         const obSupabase = createClient(config.OPEN_BRAIN_URL, config.OPEN_BRAIN_SERVICE_KEY);
-        const [embedding] = await memoryStore["embed"]([lastUserMessage]);
+        const [embedding] = await memoryStore.embedTexts([lastUserMessage]);
         const embeddingStr = `[${embedding.join(",")}]`;
         const { data: obData } = await (obSupabase as any).rpc("match_thoughts", {
           query_embedding: embeddingStr,
@@ -753,7 +753,7 @@ Today is ${today}. You have access to their contact database and WhatsApp histor
     const limit = req.query["limit"] ? Number(req.query["limit"]) : 10;
     try {
       const obSupabase = createClient(config.OPEN_BRAIN_URL, config.OPEN_BRAIN_SERVICE_KEY);
-      const [embedding] = await memoryStore["embed"]([q]);
+      const [embedding] = await memoryStore.embedTexts([q]);
       const embeddingStr = `[${embedding.join(",")}]`;
 
       // Try cosine similarity search first
