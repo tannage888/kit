@@ -223,6 +223,29 @@ stages:
       - GET /api/memories/search?q=...&contactId=...&limit=...
         Calls memoryStore.search() and returns the Memory array
 
+      ## Step 7 — Open Brain search endpoint
+      Add to gateway/src/routes/api.ts:
+      - GET /api/openbrain/search?q=...&limit=...
+        Queries the Open Brain thoughts table in Supabase (same project — use OPEN_BRAIN_URL
+        and OPEN_BRAIN_SERVICE_KEY from .env). First check the actual column structure of
+        the thoughts table via Supabase MCP before implementing.
+        If the thoughts table has an embedding column: embed the query via kit-embed Edge
+        Function then run cosine similarity search.
+        If no embedding column: fall back to Postgres full-text search on content column.
+        Returns array of { id, content, createdAt, similarity? }.
+      - This endpoint is the bridge for Claude Code sessions — when drafting messages,
+        Claude Code queries both GET /api/memories/search AND GET /api/openbrain/search
+        to assemble full context before composing.
+
+      ## Step 8 — Include Open Brain in chat system prompt
+      In the POST /api/chat handler, alongside the kit.memories enrichment (Step 4):
+      - Also call GET /api/openbrain/search with the user's message (limit 4)
+      - Append results under a separate heading in the system prompt:
+          ## From Open Brain (raw captures)
+          - content (date)
+          ...
+      - Only add the section if results exist and similarity > 0.4
+
       ## Final checks
       Run npm test in C:\dev\kit\gateway — must exit 0.
       Run npm run build in C:\dev\kit\web — must exit 0.
@@ -234,9 +257,11 @@ stages:
       kit-embed Edge Function returns 384-dim array for test input.
       POST /api/chat response improves when a relevant memory exists.
       POST /api/memories stores a row; GET /api/memories/search retrieves it.
+      GET /api/openbrain/search returns results from the thoughts table.
     needs_human_for:
       - supabase_edge_function_cold_start_errors
       - pgvector_ivfflat_index_requires_rows_before_querying
+      - open_brain_thoughts_schema_unknown (agent must check via Supabase MCP before implementing Step 7)
 
   kit-send:
     model: sonnet
