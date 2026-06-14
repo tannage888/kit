@@ -736,12 +736,12 @@ human_tasks:
     what: "Merge the GET /api/groups PR from claude_whatsapp_integration before gateway-api-expansion dispatches — the gateway proxies to that endpoint."
     done: true
 last_dispatch:
-  task_id: "kit-223b5040"
-  stage: "pwa"
+  task_id: "kit-b7c82ee7"
+  stage: "group-sweep"
   model: "sonnet"
   loop: "ralph"
-  started: "2026-06-14T11:18:18"
-  ended: "2026-06-14T11:22:59"
+  started: "2026-06-14T11:41:52"
+  ended: "2026-06-14T11:43:26"
   result: "done"
   iterations_used: 1
   tokens: { input: 0, output: 0, cost_usd: 0 }
