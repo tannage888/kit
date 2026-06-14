@@ -493,6 +493,37 @@ export function createApiRouter(
     }
   });
 
+  // ── Send (proxy to daemon) ────────────────────────────────
+
+  const sendSchema = z.object({
+    to: z.string().regex(/^\+[1-9]\d{6,14}$/, "must be E.164 format"),
+    text: z.string().min(1),
+  });
+
+  api.post("/send", async (req: Request, res: Response) => {
+    const parsed = sendSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "invalid_body", details: parsed.error.issues }); return; }
+    const { to, text } = parsed.data;
+    try {
+      const response = await fetch(`${config.EXTERNAL_GATEWAY_URL}/api/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ to, text }] }),
+      });
+      const data: any = await response.json();
+      if (response.status === 503 || data?.error === "whatsapp_not_initialised") {
+        res.status(503).json({ error: "whatsapp_not_initialised" }); return;
+      }
+      if (!response.ok) {
+        res.status(502).json({ error: "daemon_error", detail: data }); return;
+      }
+      const result = data?.results?.[0];
+      res.json({ ok: true, messageId: result?.messageId ?? null });
+    } catch (err: any) {
+      res.status(502).json({ error: "daemon_unavailable", detail: err.message });
+    }
+  });
+
   // ── Chat (Claude + Kit tools) ────────────────────────────
 
   const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
@@ -516,6 +547,7 @@ export function createApiRouter(
     { name: "kit-dismiss-capture", description: "Dismiss a pending capture.", input_schema: { type: "object", properties: { contact_id: { type: "string" } }, required: ["contact_id"] } },
     { name: "create-contact", description: "Create a new contact.", input_schema: { type: "object", properties: { name: { type: "string" }, tier: { type: "number", enum: [1, 2, 3] }, frequency: { type: "string" }, origin_story: { type: "string" }, notes: { type: "string" }, whatsapp: { type: "string" } }, required: ["name", "tier", "frequency"] } },
     { name: "set-contact-active", description: "Mark a contact active or inactive.", input_schema: { type: "object", properties: { contact_name: { type: "string" }, active: { type: "boolean" } }, required: ["contact_name", "active"] } },
+    { name: "kit-send-message", description: "Send a WhatsApp message to a contact.", input_schema: { type: "object", properties: { contact_name: { type: "string" }, text: { type: "string" } }, required: ["contact_name", "text"] } },
   ] as Anthropic.Tool[];
 
   async function dispatchChatTool(name: string, args: Record<string, unknown>): Promise<string> {
@@ -539,6 +571,27 @@ export function createApiRouter(
       case "kit-dismiss-capture": return t.dismissCapture(String(args.contact_id ?? ""));
       case "create-contact": return t.createContact({ name: String(args.name ?? ""), tier: (args.tier ?? 3) as 1 | 2 | 3, frequency: String(args.frequency ?? "Monthly"), origin_story: args.origin_story ? String(args.origin_story) : undefined, notes: args.notes ? String(args.notes) : undefined, whatsapp: args.whatsapp ? String(args.whatsapp) : undefined });
       case "set-contact-active": return t.setContactActive(String(args.contact_name ?? ""), Boolean(args.active));
+      case "kit-send-message": {
+        const contactName = String(args.contact_name ?? "");
+        const text = String(args.text ?? "");
+        const contact = contacts.findByName(contactName);
+        if (!contact) return `No contact found for "${contactName}"`;
+        if (!contact.whatsapp) return `${contactName} has no WhatsApp number on file`;
+        try {
+          const response = await fetch(`${config.EXTERNAL_GATEWAY_URL}/api/send`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: [{ to: contact.whatsapp, text }] }),
+          });
+          const data: any = await response.json();
+          if (response.status === 503 || data?.error === "whatsapp_not_initialised") return "WhatsApp is not connected — reconnect the daemon and try again";
+          if (!response.ok) return `Send failed: ${JSON.stringify(data)}`;
+          const result = data?.results?.[0];
+          return JSON.stringify({ ok: true, messageId: result?.messageId ?? null });
+        } catch (err: any) {
+          return `WhatsApp daemon unavailable: ${err.message}`;
+        }
+      }
       default: return `Unknown tool: ${name}`;
     }
   }

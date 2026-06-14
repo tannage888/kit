@@ -273,3 +273,55 @@ describe("GET /api/status", () => {
     expect(res.body.connection).toBe("unavailable");
   });
 });
+
+describe("POST /api/send", () => {
+  it("proxies to daemon and returns messageId", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ results: [{ to: "+447700900123", status: "sent", messageId: "msg-xyz-1" }] }),
+    } as unknown as Response);
+
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ to: "+447700900123", text: "Hey!" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.messageId).toBe("msg-xyz-1");
+  });
+
+  it("returns 400 for missing to field", async () => {
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ text: "Hey!" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_body");
+  });
+
+  it("returns 400 for invalid E.164 number", async () => {
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ to: "07700900123", text: "Hey!" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_body");
+  });
+
+  it("returns 400 for empty text", async () => {
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ to: "+447700900123", text: "" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_body");
+  });
+
+  it("returns 503 when daemon returns whatsapp_not_initialised", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "whatsapp_not_initialised" }),
+    } as unknown as Response);
+
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ to: "+447700900123", text: "Hey!" });
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe("whatsapp_not_initialised");
+  });
+});
