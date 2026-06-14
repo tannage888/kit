@@ -655,26 +655,26 @@ stages:
 web_ui_status:
   last_updated: 2026-06-13
   merged_prs:
-    - pr: 1  note: "sweep activity report, gap warnings, daemon pin, contract tests"
-    - pr: 3  note: "group chat sweeping + Supabase source of truth"
-    - pr: 4  note: "chat window (POST /api/chat with 18 Kit tools) + contact History tab"
-    - pr: 5  note: "chat moved to fixed right-side drawer panel (Maestro-style)"
-    - pr: 6  note: "fix schema('kit') on GET /api/contacts/:id"
-    - pr: 7  note: "fix contact name colour, active toggle, inactive filter"
-    - pr: 8  note: "exclude inactive contacts from dashboard"
-    - pr: 9  note: "add active field to TrackedContact and contacts SELECT"
-    - pr: 10 note: "clickable contacts on dashboard"
-    - pr: 11 note: "left-justify all text (body)"
-    - pr: 12 note: "left-justify #root (Vite scaffold had text-align:center)"
-    - pr: 13 note: "4-column layout — nav, contacts, detail, chat always visible"
-    - pr: 14 note: "widen main content area (nav 130px, contacts 200px, chat 300px)"
-    - pr: 15 note: "set main area to 800px"
-    - pr: 16 note: "fix layout overflow — grid-template-columns 100px 160px 1fr 240px"
-    - pr: 17 note: "Groups page, pre-fill selectedGroups from whatsapp_groups, contacts panel live-refresh on save"
-    - pr: 18 note: "widen chat column 340px→480px, ContactDetail maxWidth 560→820px"
-    - pr: 19 note: "remove 1126px #root width cap — app now spans full viewport"
-    - pr: 20 note: "widen contacts panel column 140px→200px"
-    - pr: 21 note: "widen chat column 340px→480px"
+    - {pr: 1,  note: "sweep activity report, gap warnings, daemon pin, contract tests"}
+    - {pr: 3,  note: "group chat sweeping + Supabase source of truth"}
+    - {pr: 4,  note: "chat window (POST /api/chat with 18 Kit tools) + contact History tab"}
+    - {pr: 5,  note: "chat moved to fixed right-side drawer panel (Maestro-style)"}
+    - {pr: 6,  note: "fix schema('kit') on GET /api/contacts/:id"}
+    - {pr: 7,  note: "fix contact name colour, active toggle, inactive filter"}
+    - {pr: 8,  note: "exclude inactive contacts from dashboard"}
+    - {pr: 9,  note: "add active field to TrackedContact and contacts SELECT"}
+    - {pr: 10, note: "clickable contacts on dashboard"}
+    - {pr: 11, note: "left-justify all text (body)"}
+    - {pr: 12, note: "left-justify #root (Vite scaffold had text-align:center)"}
+    - {pr: 13, note: "4-column layout — nav, contacts, detail, chat always visible"}
+    - {pr: 14, note: "widen main content area (nav 130px, contacts 200px, chat 300px)"}
+    - {pr: 15, note: "set main area to 800px"}
+    - {pr: 16, note: "fix layout overflow — grid-template-columns 100px 160px 1fr 240px"}
+    - {pr: 17, note: "Groups page, pre-fill selectedGroups from whatsapp_groups, contacts panel live-refresh on save"}
+    - {pr: 18, note: "widen chat column 340px->480px, ContactDetail maxWidth 560->820px"}
+    - {pr: 19, note: "remove 1126px #root width cap — app now spans full viewport"}
+    - {pr: 20, note: "widen contacts panel column 140px->200px"}
+    - {pr: 21, note: "widen chat column 340px->480px"}
   in_progress: []
 
 next_actions:
