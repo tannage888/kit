@@ -3,6 +3,7 @@ import styles from './Sidebar.module.css';
 
 const links = [
   { to: '/', label: 'Dashboard' },
+  { to: '/contacts', label: 'Contacts' },
   { to: '/groups', label: 'Groups' },
   { to: '/captures', label: 'Captures' },
   { to: '/sweep', label: 'Sweep' },

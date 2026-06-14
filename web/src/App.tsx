@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import ContactsPanel from './components/ContactsPanel';
 import ChatPanel from './components/ChatPanel';
 import Dashboard from './pages/Dashboard';
+import Contacts from './pages/Contacts';
 import ContactDetail from './pages/ContactDetail';
 import Groups from './pages/Groups';
 import Captures from './pages/Captures';
@@ -18,6 +19,7 @@ export default function App() {
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/contacts" element={<Contacts />} />
             <Route path="/contacts/:id" element={<ContactDetail />} />
             <Route path="/groups" element={<Groups />} />
             <Route path="/captures" element={<Captures />} />
