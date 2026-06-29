@@ -38,6 +38,7 @@ import {
   confirmCapture,
   dismissCapture,
   setContactActive,
+  updateContactFields,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -377,6 +378,53 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["contact_name", "active"],
       },
     },
+    {
+      name: "update-contact",
+      description:
+        "Update a contact's settings: how often you stay in touch (frequency), their tier, " +
+        "social battery cost, notes, WhatsApp number, or active status. Use this when the " +
+        "user wants to change a contact's cadence (e.g. 'see Barry monthly instead of weekly'), " +
+        "re-prioritise a relationship, archive/unarchive someone, or edit their profile. " +
+        "Changing frequency reschedules the next catch-up automatically. " +
+        "To log a conversation use log-interaction; to add a follow-up use add-follow-up.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_name: {
+            type: "string",
+            description: "Contact name or ID (partial name match is fine)",
+          },
+          frequency: {
+            type: "string",
+            enum: ["Weekly", "Monthly", "Quarterly"],
+            description: "How often to stay in touch. Recomputes the next-action date.",
+          },
+          tier: {
+            type: "number",
+            enum: [1, 2, 3],
+            description: "Relationship tier: 1 Inner Circle, 2 Active, 3 Business.",
+          },
+          social_battery_cost: {
+            type: "string",
+            enum: ["Low", "Medium", "High"],
+            description: "How draining contact with this person tends to be.",
+          },
+          notes: {
+            type: "string",
+            description: "Free-form notes. Replaces the contact's existing notes.",
+          },
+          whatsapp: {
+            type: "string",
+            description: "WhatsApp number in E.164 format (e.g. +447…), or empty string to clear.",
+          },
+          active: {
+            type: "boolean",
+            description: "true to keep/make active, false to archive.",
+          },
+        },
+        required: ["contact_name"],
+      },
+    },
   ],
 }));
 
@@ -579,6 +627,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           String(args?.contact_name ?? ""),
           Boolean(args?.active),
         );
+        return text(msg);
+      }
+
+      case "update-contact": {
+        const msg = await updateContactFields({
+          contact_name: String(args?.contact_name ?? ""),
+          frequency: args?.frequency as string | undefined,
+          tier: args?.tier as number | undefined,
+          social_battery_cost: args?.social_battery_cost as string | undefined,
+          notes: args?.notes as string | undefined,
+          whatsapp: args?.whatsapp as string | undefined,
+          active: args?.active as boolean | undefined,
+        });
         return text(msg);
       }
 

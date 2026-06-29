@@ -811,6 +811,119 @@ export async function setContactActive(
     : `${contact.name} marked inactive — will be skipped by check-ins, sweeps, and follow-up prompts.`;
 }
 
+// ── Tool: update-contact ──────────────────────────────────────────────────────
+
+/**
+ * Canonical contact frequencies and their cadence in days.
+ * Inlined here (rather than imported from services/contacts.ts) so the MCP
+ * stdio process never pulls in config.ts, which exits the process if
+ * ANTHROPIC_API_KEY is absent — the MCP server doesn't need that key.
+ */
+const FREQUENCY_DAYS: Record<string, number> = {
+  Weekly: 7,
+  Monthly: 30,
+  Quarterly: 90,
+};
+
+/** Normalise a free-form frequency word to its canonical label, or null if unknown. */
+function normaliseFrequency(input: string): string | null {
+  switch (input.trim().toLowerCase()) {
+    case "weekly":    return "Weekly";
+    case "monthly":   return "Monthly";
+    case "quarterly": return "Quarterly";
+    default:          return null;
+  }
+}
+
+export interface UpdateContactInput {
+  contact_name: string;
+  frequency?: string;
+  tier?: number;
+  social_battery_cost?: string;
+  notes?: string;
+  whatsapp?: string;
+  active?: boolean;
+}
+
+/**
+ * Update a contact's editable settings: frequency/cadence, tier, social
+ * battery cost, notes, WhatsApp number, or active status. Changing frequency
+ * re-derives next_action from the existing last_contact under the new cadence.
+ * Persists to Supabase; the gateway's sync service propagates to the markdown.
+ */
+export async function updateContactFields(input: UpdateContactInput): Promise<string> {
+  const db = kitClient();
+
+  // Resolve without the active filter so archived contacts can be edited too.
+  const { data } = await db
+    .from("contacts")
+    .select("*")
+    .or(`id.eq.${input.contact_name},name.ilike.%${input.contact_name}%`)
+    .limit(1);
+
+  const contact = data?.[0] as Contact | undefined;
+  if (!contact) return `Contact "${input.contact_name}" not found.`;
+
+  const dbFields: Record<string, unknown> = {};
+  const changes: string[] = [];
+
+  if (input.frequency !== undefined) {
+    const freq = normaliseFrequency(input.frequency);
+    if (!freq) {
+      return `Invalid frequency "${input.frequency}". Use Weekly, Monthly, or Quarterly.`;
+    }
+    const freqDays = FREQUENCY_DAYS[freq] as number;
+    dbFields.frequency = freq;
+    dbFields.frequency_days = freqDays;
+    // Re-derive the next action from the last contact date under the new cadence.
+    if (contact.last_contact) {
+      dbFields.next_action = new Date(
+        new Date(contact.last_contact).getTime() + freqDays * 86_400_000
+      )
+        .toISOString()
+        .slice(0, 10);
+    }
+    changes.push(`frequency → ${freq}`);
+  }
+
+  if (input.tier !== undefined) {
+    if (![1, 2, 3].includes(input.tier)) {
+      return `Invalid tier ${input.tier}. Use 1 (Inner Circle), 2 (Active), or 3 (Business).`;
+    }
+    dbFields.tier = input.tier;
+    changes.push(`tier → ${input.tier} (${tierLabel(input.tier)})`);
+  }
+
+  if (input.social_battery_cost !== undefined) {
+    dbFields.social_battery_cost = input.social_battery_cost;
+    changes.push(`battery cost → ${input.social_battery_cost}`);
+  }
+
+  if (input.notes !== undefined) {
+    dbFields.notes = input.notes;
+    changes.push("notes updated");
+  }
+
+  if (input.whatsapp !== undefined) {
+    dbFields.whatsapp = input.whatsapp || null;
+    changes.push(input.whatsapp ? `WhatsApp → ${input.whatsapp}` : "WhatsApp cleared");
+  }
+
+  if (input.active !== undefined) {
+    dbFields.active = input.active;
+    changes.push(input.active ? "reactivated" : "archived");
+  }
+
+  if (changes.length === 0) {
+    return `No changes specified for ${contact.name}.`;
+  }
+
+  const { error } = await db.from("contacts").update(dbFields).eq("id", contact.id);
+  if (error) throw new Error(`contacts update failed: ${error.message}`);
+
+  return `Updated ${contact.name}: ${changes.join(", ")}.`;
+}
+
 // ── Tool: kit-pending-captures ────────────────────────────────────────────────
 
 export async function getPendingCaptures(): Promise<string> {
