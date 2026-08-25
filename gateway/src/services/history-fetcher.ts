@@ -9,6 +9,8 @@
  * - Requests messages from the daemon since a watermark timestamp
  * - Applies a hard cap on messages per contact to bound memory usage
  * - Groups messages into ConversationThreads by silence gaps (default 8h)
+ * - Returns only settled threads, so a conversation is summarised once when
+ *   it ends rather than once per sweep while it is still going
  * - Only returns threads with ≥ 2 messages (single messages usually have
  *   nothing worth summarising)
  */
@@ -22,10 +24,12 @@ const MIN_THREAD_MESSAGES = 2;
 export class HistoryFetcher {
   private readonly maxMessages: number;
   private readonly gapMs: number;
+  private readonly maxThreadAgeMs: number;
 
   constructor(private gatewayUrl: string) {
     this.maxMessages = config.SWEEP_MAX_MESSAGES_PER_CONTACT;
     this.gapMs = config.SWEEP_CONVERSATION_GAP_HOURS * 60 * 60 * 1000;
+    this.maxThreadAgeMs = config.SWEEP_MAX_THREAD_AGE_HOURS * 60 * 60 * 1000;
   }
 
   /**
@@ -60,19 +64,64 @@ export class HistoryFetcher {
 
     if (messages.length === 0) return [];
 
-    // Apply per-contact message cap
-    const capped = messages.slice(0, this.maxMessages);
+    // Apply per-contact message cap, keeping the most recent. Taking the
+    // oldest would summarise stale history and silently drop what just
+    // happened, which is the opposite of what a sweep is for.
+    const capped = messages.slice(-this.maxMessages);
     if (capped.length < messages.length) {
       console.warn(
-        `⚠️  Hit max message cap (${this.maxMessages}) for ${contact.name} — some history may be omitted`
+        `⚠️  Hit max message cap (${this.maxMessages}) for ${contact.name} — older history omitted`
       );
     }
 
     capped.sort((a, b) => a.timestamp - b.timestamp);
-    return this.groupIntoThreads(contact, capped);
+    return this.settledThreads(contact, this.groupIntoThreads(contact, capped));
   }
 
   // ── Private helpers ──────────────────────────────────────
+
+  /**
+   * Drop threads that are still in progress.
+   *
+   * Sweeps run far more often than conversations end — every 3 hours by
+   * default against an 8 hour gap — so a chat spanning an afternoon was
+   * being cut at each sweep boundary and summarised as several unrelated
+   * interactions. Kat had five entries for one continuous conversation,
+   * their created_at timestamps exactly one sweep interval apart.
+   *
+   * A thread is only complete once it has been silent for longer than the
+   * conversation gap. Leaving the rest behind also leaves the watermark
+   * behind it, so the remaining messages are re-read and folded into the
+   * whole conversation on a later sweep.
+   *
+   * The exception is a thread that has been running longer than
+   * SWEEP_MAX_THREAD_AGE_HOURS — a chat that never goes quiet would
+   * otherwise never be logged at all.
+   */
+  private settledThreads(
+    contact: TrackedContact,
+    threads: ConversationThread[]
+  ): ConversationThread[] {
+    const now = Date.now();
+
+    return threads.filter((thread) => {
+      const quietFor = now - thread.lastActivityAt;
+      if (quietFor >= this.gapMs) return true;
+
+      if (now - thread.startedAt >= this.maxThreadAgeMs) {
+        console.log(
+          `  ⏱️  ${contact.name} — capturing a still-active conversation ` +
+          `(running over ${config.SWEEP_MAX_THREAD_AGE_HOURS}h)`
+        );
+        return true;
+      }
+
+      console.log(
+        `  ⏳ ${contact.name} — conversation still in progress, leaving it for the next sweep`
+      );
+      return false;
+    });
+  }
 
   /**
    * Group a chronologically-sorted message array into conversation threads.
