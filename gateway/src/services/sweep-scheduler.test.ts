@@ -18,6 +18,7 @@ vi.mock("../config.js", () => ({
     SUPABASE_SERVICE_KEY: "test-key",
     SWEEP_INTERVAL_HOURS: 3,
     SWEEP_INITIAL_LOOKBACK_DAYS: 7,
+    PORT: 3141,
   },
 }));
 
@@ -126,10 +127,15 @@ describe("SweepScheduler", () => {
     mockSupabaseUpsert.mockResolvedValue({ error: null });
     vi.useFakeTimers();
     // Default: daemon reports connected
-    vi.spyOn(global, "fetch").mockResolvedValue({
+    vi.spyOn(global, "fetch").mockImplementation(async (url: any) => ({
       ok: true,
-      json: async () => ({ connection: "connected" }),
-    } as unknown as Response);
+      json: async () =>
+        String(url).includes("sync-groups")
+          ? { ok: true, contactsChanged: 0, totalGroupLinks: 0 }
+          : String(url).includes("/api/chats")
+            ? { chats: [] }
+            : { connection: "connected" },
+    }) as unknown as Response);
   });
 
   afterEach(() => {
@@ -203,6 +209,34 @@ describe("SweepScheduler", () => {
       expect.objectContaining({ contact_id: "contact-1" }),
       expect.any(Object)
     );
+  });
+
+  it("reconciles group membership before reading the contact list", async () => {
+    // Membership drives which group JIDs get swept. Syncing after getAll()
+    // would mean a newly joined group waits a further interval to appear.
+    const contact = makeContact();
+    const { scheduler, mockContacts } = makeScheduler([contact], [[]]);
+
+    await scheduler.runSweep();
+
+    const calls = (global.fetch as any).mock.calls.map((c: any[]) => String(c[0]));
+    expect(calls.some((u: string) => u.includes("sync-groups"))).toBe(true);
+    expect(mockContacts.getAll).toHaveBeenCalled();
+  });
+
+  it("still sweeps when the membership sync fails", async () => {
+    const contact = makeContact();
+    const { scheduler, mockFetcher } = makeScheduler([contact], [[]]);
+    vi.spyOn(global, "fetch").mockImplementation(async (url: any) => {
+      if (String(url).includes("sync-groups")) throw new Error("ECONNREFUSED");
+      return { ok: true, json: async () => ({ connection: "connected" }) } as unknown as Response;
+    });
+
+    const result = await scheduler.runSweep();
+
+    // Stale membership misses new groups; it must not stop the sweep.
+    expect(result?.contactsSwept).toBe(1);
+    expect(mockFetcher.fetchSince).toHaveBeenCalled();
   });
 
   it("aborts when WhatsApp is not connected", async () => {

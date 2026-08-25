@@ -125,6 +125,7 @@ export class SweepScheduler {
       }
 
       await this.loadGroupNames();
+      await this.syncGroupMembership();
 
       let allContacts = this.contacts.getAll();
 
@@ -180,7 +181,13 @@ export class SweepScheduler {
     // to populate the message buffer before we query it.
     const startupDelayMs = 30_000;
     console.log(`⏳ First sweep in ${startupDelayMs / 1000}s (waiting for history sync)...`);
-    setTimeout(() => void this.runSweep(), startupDelayMs);
+    setTimeout(() => {
+      void this.runSweep();
+      // The first run comes from this timeout rather than the interval, so
+      // advance the readout here too — otherwise /api/status reports a
+      // nextSweep in the past until the interval first fires, hours later.
+      this.nextSweepAt = new Date(Date.now() + intervalMs);
+    }, startupDelayMs);
 
     // Then schedule repeating runs
     this.timer = setInterval(() => {
@@ -189,6 +196,40 @@ export class SweepScheduler {
     }, intervalMs);
 
     this.nextSweepAt = new Date(Date.now() + startupDelayMs);
+  }
+
+  /**
+   * Reconcile each contact's group membership before sweeping.
+   *
+   * whatsapp_groups drives the group branch below. Left to a manual call it
+   * goes stale in both directions — groups joined since the last sync are
+   * never swept, and groups since left are swept forever. Running it here
+   * ties membership to the same 3-hourly cadence as the sweep itself.
+   *
+   * Failure is non-fatal: a stale membership list still sweeps, it just
+   * misses new groups until the next run.
+   */
+  private async syncGroupMembership(): Promise<void> {
+    try {
+      const res = await fetch(`http://localhost:${config.PORT}/api/contacts/sync-groups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        console.warn(`  ⚠️  group membership sync returned HTTP ${res.status}`);
+        return;
+      }
+      const body = (await res.json()) as { contactsChanged?: number; totalGroupLinks?: number };
+      if (body.contactsChanged) {
+        console.log(
+          `  👥 Group membership updated for ${body.contactsChanged} contact(s) ` +
+          `(${body.totalGroupLinks} group links).`
+        );
+      }
+    } catch (err) {
+      console.warn(`  ⚠️  group membership sync failed:`, (err as Error).message);
+    }
   }
 
   /**

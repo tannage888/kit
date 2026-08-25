@@ -195,7 +195,12 @@ export class SyncService {
 
     const filePath = this.contactFileMap.get(contactId);
     if (!filePath || !fs.existsSync(filePath)) {
-      console.warn(`  ⚠️  interaction insert: no file for contact "${contactId}"`);
+      // The map is built once at startup, so a contact added since then has
+      // no entry and its interactions were being dropped silently — a refresh
+      // found ten already missing from files that were present in Supabase.
+      // Regenerating resolves the path from the contact row instead.
+      console.warn(`  ⚠️  interaction insert: "${contactId}" not in file map — regenerating`);
+      void this.onInteractionUpdate(row);
       return;
     }
 
@@ -239,7 +244,12 @@ export class SyncService {
     const contactId: string = row.contact_id;
 
     const filePath = this.contactFileMap.get(contactId);
-    if (!filePath || !fs.existsSync(filePath)) return;
+    if (!filePath || !fs.existsSync(filePath)) {
+      // Same startup-map gap as interactions — regenerate rather than drop it.
+      console.warn(`  ⚠️  follow-up insert: "${contactId}" not in file map — regenerating`);
+      void this.onInteractionUpdate(row);
+      return;
+    }
 
     console.log(`☁️  → 📝 follow-up added: ${row.contact_id}`);
 
