@@ -25,6 +25,9 @@ const envSchema = z.object({
   SWEEP_INITIAL_LOOKBACK_DAYS: z.coerce.number().default(7),
   SWEEP_MAX_MESSAGES_PER_CONTACT: z.coerce.number().default(500),
   SWEEP_CONVERSATION_GAP_HOURS: z.coerce.number().default(8),
+  // Safety valve for a conversation that never goes quiet: capture it anyway
+  // once it has been running this long, rather than never logging it.
+  SWEEP_MAX_THREAD_AGE_HOURS: z.coerce.number().default(24),
 });
 
 export type Env = z.infer<typeof envSchema>;
