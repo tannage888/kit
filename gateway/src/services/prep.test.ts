@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildPrepCard, buildDraftContext, type PrepContact } from "./prep.js";
 
-const TODAY = "2026-04-19";
-
 const contact: PrepContact = {
   id: "alice",
   name: "Alice Example",

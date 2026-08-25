@@ -23,6 +23,7 @@ import { SweepScheduler } from "../services/sweep-scheduler.js";
 import { ImportIngestor } from "../services/import-ingestor.js";
 import { ContactCreator, type CreateContactInput } from "../services/contact-creator.js";
 import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
+import { normaliseMessages, toJid, type RawDaemonMessage } from "../utils/wa-messages.js";
 import { parseContactFile } from "../utils/markdown.js";
 import type { CaptureMode, Channel, GatewayStatus, TrackedContact } from "../types.js";
 import { EnergyService } from "../services/energy.js";
@@ -131,7 +132,7 @@ export function createApiRouter(
     const id = req.params["id"] as string;
     const [contactRes, interactionsRes, followUpsRes] = await Promise.all([
       supabase.schema("kit").from("contacts").select("*").eq("id", id).single(),
-      supabase.schema("kit").from("interaction_log").select("id, date, notes, channel").eq("contact_id", id).order("date", { ascending: false }).limit(20),
+      supabase.schema("kit").from("interaction_log").select("id, date, notes, channel, group_jid, group_name").eq("contact_id", id).order("date", { ascending: false }).limit(20),
       supabase.schema("kit").from("follow_ups").select("id, text, completed, created_at").eq("contact_id", id).order("completed").order("created_at", { ascending: false }),
     ]);
     if (!contactRes.data) { res.status(404).json({ error: "contact_not_found" }); return; }
@@ -141,6 +142,68 @@ export function createApiRouter(
   api.post("/contacts/refresh", async (_req: Request, res: Response) => {
     const count = await contacts.loadFromDatabase();
     res.json({ ok: true, count });
+  });
+
+  /**
+   * Reconcile each contact's group membership from the daemon.
+   *
+   * whatsapp_groups drives the group branch of the sweep, and as a manual
+   * field it stayed empty for every contact — so that branch never ran.
+   * `dry_run` reports what would change without writing.
+   */
+  api.post("/contacts/sync-groups", async (req: Request, res: Response) => {
+    const dryRun = req.body?.dry_run === true;
+    // Optional partial-name filter, so membership can be switched on for one
+    // contact at a time rather than all of them at once.
+    const only = typeof req.body?.contact_name === "string"
+      ? req.body.contact_name.toLowerCase()
+      : null;
+    const results: Array<{ contact: string; groups: string[]; changed: boolean }> = [];
+
+    try {
+      for (const contact of contacts.getAll()) {
+        if (!contact.whatsapp) continue;
+        if (only && !contact.name.toLowerCase().includes(only)) continue;
+
+        const identifier = contact.whatsapp.replace(/\s+/g, "");
+        const response = await fetch(
+          `${config.EXTERNAL_GATEWAY_URL}/api/contacts/${encodeURIComponent(identifier)}/chats`
+        );
+        if (!response.ok) continue;
+
+        const body = (await response.json()) as { chats?: Array<{ chatJid: string }> };
+        const jids = (body.chats ?? [])
+          .map((c) => c.chatJid)
+          .filter((j) => j.endsWith("@g.us"))
+          .sort();
+
+        const next = jids.join(",");
+        const changed = next !== (contact.whatsapp_groups ?? "");
+        results.push({ contact: contact.name, groups: jids, changed });
+
+        if (changed && !dryRun) {
+          const { error } = await supabase
+            .schema("kit")
+            .from("contacts")
+            .update({ whatsapp_groups: next || null })
+            .eq("id", contact.id);
+          if (error) throw new Error(`${contact.name}: ${error.message}`);
+        }
+      }
+
+      if (!dryRun && results.some((r) => r.changed)) await contacts.loadFromDatabase();
+
+      res.json({
+        ok: true,
+        dryRun,
+        contactsChecked: results.length,
+        contactsChanged: results.filter((r) => r.changed).length,
+        totalGroupLinks: results.reduce((n, r) => n + r.groups.length, 0),
+        results,
+      });
+    } catch (err: any) {
+      res.status(502).json({ error: "sync_failed", detail: err.message });
+    }
   });
 
   // Create a new contact: writes markdown, upserts Supabase, registers in
@@ -493,6 +556,62 @@ export function createApiRouter(
     }
   });
 
+  // ── Conversation transcript (read-only proxy to daemon) ───
+
+  const conversationQuerySchema = z.object({
+    days: z.coerce.number().int().min(1).max(365).default(14),
+    limit: z.coerce.number().int().min(1).max(1000).default(200),
+  });
+
+  /**
+   * Return the raw message transcript for a contact.
+   *
+   * Read-only by design: nothing here writes to Supabase, Open Brain or the
+   * markdown file. It exists so the user can ask what someone actually said,
+   * rather than reading a summary of a summary.
+   */
+  api.get("/contacts/:id/conversation", async (req: Request, res: Response) => {
+    const parsed = conversationQuerySchema.safeParse(req.query);
+    if (!parsed.success) { res.status(400).json({ error: "invalid_query", details: parsed.error.issues }); return; }
+    const { days, limit } = parsed.data;
+
+    const contact = contacts.getById(req.params["id"] as string);
+    if (!contact) { res.status(404).json({ error: "contact_not_found" }); return; }
+    if (!contact.whatsapp) { res.status(409).json({ error: "no_whatsapp_number" }); return; }
+    // `off` is the strongest opt-out the contact record carries. Reading the
+    // transcript stores nothing, but honouring the flag keeps one switch
+    // meaningful across every path that touches someone's messages.
+    if (contact.wa_capture === "off") { res.status(403).json({ error: "capture_disabled" }); return; }
+
+    const jid = toJid(contact.whatsapp);
+    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const url = `${config.EXTERNAL_GATEWAY_URL}/api/chats/${encodeURIComponent(jid)}/messages?from=${encodeURIComponent(from)}`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        res.status(502).json({ error: "daemon_error", status: response.status }); return;
+      }
+      const body = await response.json() as { messages?: RawDaemonMessage[] };
+      const all = normaliseMessages(body.messages ?? [], jid);
+
+      // Keep the most recent `limit` — a truncated tail is the useful half
+      // when the question is "what did they just say?"
+      const messages = all.slice(-limit);
+      res.json({
+        contact: { id: contact.id, name: contact.name },
+        from,
+        to: new Date().toISOString(),
+        total: all.length,
+        returned: messages.length,
+        truncated: all.length > messages.length,
+        messages,
+      });
+    } catch (err: any) {
+      res.status(502).json({ error: "daemon_unavailable", detail: err.message });
+    }
+  });
+
   // ── Send (proxy to daemon) ────────────────────────────────
 
   const sendSchema = z.object({
@@ -538,6 +657,7 @@ export function createApiRouter(
     { name: "kit-daily-checkin", description: "Run daily check-in: who to reach out to today based on energy level.", input_schema: { type: "object", properties: {}, required: [] } },
     { name: "kit-set-energy", description: "Set social energy level for today (high/medium/low).", input_schema: { type: "object", properties: { level: { type: "string", enum: ["high", "medium", "low"] } }, required: ["level"] } },
     { name: "kit-get-energy", description: "Check today's energy level.", input_schema: { type: "object", properties: {}, required: [] } },
+    { name: "get-conversation", description: "Read the actual WhatsApp messages exchanged with a contact — the real transcript, not a summary. Read-only.", input_schema: { type: "object", properties: { contact_name: { type: "string" }, days: { type: "number" }, limit: { type: "number" } }, required: ["contact_name"] } },
     { name: "sweep-now", description: "Pull recent WhatsApp history and summarise conversations.", input_schema: { type: "object", properties: { contact_name: { type: "string" } }, required: [] } },
     { name: "kit-prep-card", description: "Pre-flight brief before reaching out to a contact.", input_schema: { type: "object", properties: { contact_name: { type: "string" } }, required: ["contact_name"] } },
     { name: "kit-draft-context", description: "Context for drafting a message to a contact.", input_schema: { type: "object", properties: { contact_name: { type: "string" }, intent: { type: "string" } }, required: ["contact_name"] } },
@@ -562,6 +682,7 @@ export function createApiRouter(
       case "kit-daily-checkin": return t.dailyCheckin();
       case "kit-set-energy": return t.setEnergy(String(args.level ?? ""));
       case "kit-get-energy": return t.getEnergy();
+      case "get-conversation": return t.getConversation({ contact_name: String(args.contact_name ?? ""), days: args.days as number | undefined, limit: args.limit as number | undefined });
       case "sweep-now": return t.sweepNow(args.contact_name ? String(args.contact_name) : undefined);
       case "kit-prep-card": return t.kitPrepCard(String(args.contact_name ?? ""));
       case "kit-draft-context": return t.kitDraftContext(String(args.contact_name ?? ""), args.intent ? String(args.intent) : undefined);
@@ -734,7 +855,7 @@ Today is ${today}. You have access to their contact database and WhatsApp histor
               const parts = line.split("|");
               if (parts.length < 3) continue;
               const [rawCat, rawName, ...factParts] = parts;
-              const category = rawCat.replace(/[\[\]]/g, "").trim() as any;
+              const category = rawCat.replace(/[[\]]/g, "").trim() as any;
               const nameOrUser = rawName.trim();
               const fact = factParts.join("|").trim();
               if (!fact || !["contact_fact", "life_event", "preference", "interaction_insight"].includes(category)) continue;

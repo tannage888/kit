@@ -23,6 +23,7 @@ import { ContextBinder, toCanonicalName, ThoughtType } from "../context-binding/
 import { ContactRegistry } from "./contacts.js";
 import type {
   ConversationThread,
+  Message,
   CaptureResult,
   Channel,
   Sentiment,
@@ -38,6 +39,61 @@ function channelDisplayName(channel: Channel): string {
     case "email":     return "Email";
     default:          return channel;
   }
+}
+
+/** Label used for anyone in a group who is not the user or the tracked contact. */
+export const OTHER_PARTICIPANT_LABEL = "Another participant";
+
+/**
+ * Who to attribute a message to in the transcript handed to Claude.
+ *
+ * In a 1:1 thread every inbound message is the contact's. In a group it is
+ * not: attributing everything to the tracked contact both corrupts the
+ * summary and puts other people's words in that contact's record. Anyone
+ * who isn't the user or the tracked contact is anonymised, so no third
+ * party can be named in what gets stored.
+ */
+export function speakerLabel(m: Message, thread: ConversationThread): string {
+  if (m.fromMe) return "Me";
+  if (!thread.groupJid) return thread.contact.name;
+  return isFromContact(m, thread.contact.whatsapp) ? thread.contact.name : OTHER_PARTICIPANT_LABEL;
+}
+
+/** Did this message come from the given number? Compares digits only, as
+ *  stored numbers carry spaces and a "+" while JIDs do not. */
+function isFromContact(m: Message, whatsapp: string | null): boolean {
+  const senderDigits = (m.senderJid ?? "").replace(/\D/g, "");
+  const contactDigits = (whatsapp ?? "").replace(/\D/g, "");
+  return Boolean(senderDigits && contactDigits && senderDigits === contactDigits);
+}
+
+/**
+ * Did the tracked contact actually say anything in this group thread?
+ *
+ * Groups are swept per contact, so a busy group produces a thread for each
+ * member being tracked — including ones who never spoke. Summarising those
+ * writes a log entry that says nothing about the person whose file it lands in.
+ */
+export function contactParticipated(thread: ConversationThread): boolean {
+  if (!thread.groupJid) return true;
+  return thread.messages.some((m) => !m.fromMe && isFromContact(m, thread.contact.whatsapp));
+}
+
+/**
+ * The Open Brain thought text for a capture.
+ *
+ * Group captures are labelled explicitly. Open Brain is append-only and feeds
+ * prep, draft and reconnect context, so an unmarked group thought reads as a
+ * direct conversation with the contact for as long as the record exists.
+ */
+export function buildInteractionThought(result: CaptureResult): string {
+  const channelLabel = channelDisplayName(result.channel);
+  const groupLabel = result.groupName ?? result.groupJid;
+  const opening = result.groupJid
+    ? `${channelLabel} group conversation in "${groupLabel}" involving ${result.contactName} on ${result.date}. ` +
+      `Group chat, not a direct conversation — other participants are unnamed.`
+    : `${channelLabel} conversation with ${result.contactName} on ${result.date}.`;
+  return [opening, result.topics].join("\n");
 }
 
 export interface CaptureOptions {
@@ -60,6 +116,14 @@ export class CapturePipeline {
   constructor(private contacts: ContactRegistry) {
     this.anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
     this.kit = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
+    // Open Brain is optional in config but required here — the pipeline's
+    // whole job is writing captures to it. Fail with a readable message
+    // rather than the Supabase client's opaque "supabaseUrl is required".
+    if (!config.OPEN_BRAIN_URL || !config.OPEN_BRAIN_SERVICE_KEY) {
+      throw new Error(
+        "CapturePipeline requires OPEN_BRAIN_URL and OPEN_BRAIN_SERVICE_KEY to be set."
+      );
+    }
     this.binder = new ContextBinder({
       supabaseUrl: config.OPEN_BRAIN_URL,
       supabaseKey: config.OPEN_BRAIN_SERVICE_KEY,
@@ -157,12 +221,18 @@ export class CapturePipeline {
    */
   private async commit(contactId: string, result: CaptureResult): Promise<void> {
     // 1. Write to interaction_log
+    // Only send the group columns for a group capture. A 1:1 capture then
+    // keeps working against a database where the migration adding them has
+    // not been run yet, rather than failing on an unknown column.
     const { error: logError } = await this.kit.schema("kit").from("interaction_log").insert({
       id: crypto.randomUUID(),
       contact_id: contactId,
       date: result.date,
       channel: result.channel,
       notes: result.topics,
+      ...(result.groupJid
+        ? { group_jid: result.groupJid, group_name: result.groupName ?? null }
+        : {}),
     });
 
     if (logError) {
@@ -170,22 +240,32 @@ export class CapturePipeline {
       throw logError;
     }
 
-    // 2. Update contacts.last_contact and next_action in Supabase
-    await this.contacts.updateLastContact(contactId, result.date);
+    // 2. Update contacts.last_contact and next_action in Supabase.
+    //    Group activity is deliberately excluded: seeing someone's name in a
+    //    group is not contact with them, and letting it move the date would
+    //    push their next catch-up out and corrupt the check-in queue.
+    if (!result.groupJid) {
+      await this.contacts.updateLastContact(contactId, result.date);
+    }
 
-    // 3. Write to Open Brain via ContextBinder
+    // 3. Write to Open Brain via ContextBinder.
+    //    Group captures are labelled as such. Open Brain thoughts are
+    //    append-only and feed prep, draft and reconnect context, so an
+    //    unmarked group thought would read as a direct conversation with the
+    //    contact for as long as the record exists.
     const entity = toCanonicalName(result.contactName);
-    const channelLabel = channelDisplayName(result.channel);
-    const thoughtContent = [
-      `${channelLabel} conversation with ${result.contactName} on ${result.date}.`,
-      result.topics,
-    ].join("\n");
+    const groupLabel = result.groupName ?? result.groupJid;
+    const thoughtContent = buildInteractionThought(result);
 
     await this.binder.captureThought({
       content: thoughtContent,
       entity,
       thoughtType: ThoughtType.INTERACTION,
-      extraTopics: [result.channel, result.sentiment],
+      extraTopics: [
+        result.channel,
+        result.sentiment,
+        ...(result.groupJid ? ["group"] : []),
+      ],
       people: [result.contactName],
       source: "kit-gateway",
     });
@@ -193,9 +273,12 @@ export class CapturePipeline {
     // 4. Write follow-ups as NEXT_ACTION thoughts
     if (result.followUps.trim()) {
       await this.binder.captureThought({
-        content: `Follow-up with ${result.contactName}: ${result.followUps}`,
+        content: result.groupJid
+          ? `Follow-up with ${result.contactName} (from the "${groupLabel}" group chat): ${result.followUps}`
+          : `Follow-up with ${result.contactName}: ${result.followUps}`,
         entity,
         thoughtType: ThoughtType.NEXT_ACTION,
+        extraTopics: result.groupJid ? ["group"] : undefined,
         people: [result.contactName],
         source: "kit-gateway",
       });
@@ -210,7 +293,7 @@ export class CapturePipeline {
   ): Promise<CaptureResult> {
     const transcript = thread.messages
       .map((m) => {
-        const who = m.fromMe ? "Me" : thread.contact.name;
+        const who = speakerLabel(m, thread);
         const time = new Date(m.timestamp).toLocaleTimeString("en-GB", {
           hour: "2-digit",
           minute: "2-digit",
@@ -220,12 +303,28 @@ export class CapturePipeline {
       .join("\n");
 
     const channelLabel = channelDisplayName(thread.channel);
+
+    // A group thread contains people who never opted into Kit. The summary is
+    // what gets stored, so the rule is enforced here as well as in the
+    // transcript labelling — the label stops names reaching Claude, this stops
+    // Claude describing whoever is left.
+    const groupRules = thread.groupJid
+      ? `
+This is a GROUP conversation. Only the user ("Me") and ${thread.contact.name} may be
+named or described. Everyone else appears as "${OTHER_PARTICIPANT_LABEL}" — never
+name them, never infer who they are, and never describe them individually. Use
+their messages only as context for what ${thread.contact.name} said or agreed to.
+Summarise the conversation as it concerns ${thread.contact.name}; if they said
+nothing of substance, say so briefly rather than summarising the wider group.
+`
+      : "";
+
     const response = await this.anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: `You are a conversation summariser for Kit, a personal relationship management app.
 You will be given a ${channelLabel} conversation transcript between the user and one of their contacts.
-
+${groupRules}
 Produce a JSON object with exactly these fields:
 - "topics": a concise summary of what was discussed (2-3 sentences max)
 - "follow_ups": any action items, promises made, or things to remember for next time (empty string if none)
@@ -282,6 +381,8 @@ ${transcript}`,
       sentiment,
       channel: thread.channel,
       summary: `${summaryPrefix}: ${parsed.topics}`,
+      groupJid: thread.groupJid,
+      groupName: thread.groupName,
     };
   }
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { MessageRouter } from "./message-router.js";
 import type { TrackedContact, WhatsAppMessage } from "../types.js";
 
@@ -27,6 +27,9 @@ function makeContact(overrides: Partial<TrackedContact> = {}): TrackedContact {
     linkedin_capture: "disabled",
     instagram_username: null,
     instagram_capture: "disabled",
+    whatsapp_groups: null,
+    url: null,
+    active: true,
     ...overrides,
   };
 }

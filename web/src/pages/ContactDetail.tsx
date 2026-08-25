@@ -30,6 +30,8 @@ interface Interaction {
   date: string;
   notes: string;
   channel: string | null;
+  group_jid?: string | null;
+  group_name?: string | null;
 }
 
 interface FollowUp {
@@ -279,6 +281,12 @@ export default function ContactDetail() {
                     {interaction.channel && (
                       <span style={{ background: '#1e1e35', border: '1px solid #333', borderRadius: 4, padding: '0.1rem 0.4rem', fontSize: '0.72rem', color: '#7c6fcd' }}>
                         {interaction.channel}
+                      </span>
+                    )}
+                    {/* Group entries are labelled — unmarked they read as a direct conversation. */}
+                    {interaction.group_jid && (
+                      <span style={{ background: '#2a2416', border: '1px solid #4a3f22', borderRadius: 4, padding: '0.1rem 0.4rem', fontSize: '0.72rem', color: '#c9a227' }}>
+                        group: {interaction.group_name ?? 'unnamed'}
                       </span>
                     )}
                   </div>

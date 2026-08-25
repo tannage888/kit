@@ -13,8 +13,8 @@ import { buildPrepCard, buildDraftContext } from "./services/prep.js";
 import { buildReconnectContext } from "./services/reconnect.js";
 import { isEnergyLevel } from "./services/energy.js";
 import type { CheckinContact, CheckinFollowUp } from "./services/checkin.js";
-import type { PrepContact, PrepInteraction, PrepFollowUp, PrepBrainContext } from "./services/prep.js";
-import type { ReconnectContact, ReconnectInteraction } from "./services/reconnect.js";
+import type { PrepContact, PrepInteraction } from "./services/prep.js";
+import type { ReconnectContact } from "./services/reconnect.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -25,9 +25,9 @@ function makeCheckinContact(overrides: Partial<CheckinContact> = {}): CheckinCon
     id: "alice",
     name: "Alice",
     tier: 1,
-    frequency: "Monthly",
     frequency_days: 30,
     last_contact: "2026-03-01",
+    next_action: null,
     social_battery_cost: "Low",
     birthday: null,
     ...overrides,
@@ -40,30 +40,29 @@ function makePrepContact(overrides: Partial<PrepContact> = {}): PrepContact {
     name: "Alice",
     tier: 1,
     frequency: "Monthly",
-    frequency_days: 30,
     last_contact: "2026-03-01",
+    next_action: null,
     origin_story: "Met at a conference",
     special_interests: "Rock climbing, philosophy",
     sensitive_topics: "Family situation",
     preferred_channel: "whatsapp",
     social_battery_cost: "Low",
+    notes: null,
     ...overrides,
   };
 }
 
 function makeReconnectContact(overrides: Partial<ReconnectContact> = {}): ReconnectContact {
   return {
-    id: "bob",
     name: "Bob",
     tier: 2,
     frequency: "Monthly",
-    frequency_days: 30,
     last_contact: "2025-06-01",
     origin_story: "Old university friend",
     special_interests: "Music, travel",
     sensitive_topics: null,
     preferred_channel: "whatsapp",
-    social_battery_cost: "Medium",
+    notes: null,
     ...overrides,
   };
 }
@@ -165,7 +164,7 @@ describe("Phase 6 — prep card and draft context", () => {
     const interactions: PrepInteraction[] = [
       { date: "2026-03-01", channel: "whatsapp", notes: "Chatted about the trip" },
     ];
-    const card = buildPrepCard(contact, interactions, [], [], TODAY);
+    const card = buildPrepCard(contact, interactions, [], []);
     expect(typeof card).toBe("string");
     expect(card).toContain("Alice");
     expect(card).toContain("Rock climbing");
@@ -173,7 +172,7 @@ describe("Phase 6 — prep card and draft context", () => {
 
   it("builds draft context string that mentions interests", () => {
     const contact = makePrepContact();
-    const ctx = buildDraftContext(contact, [], [], [], TODAY);
+    const ctx = buildDraftContext(contact, [], [], []);
     expect(typeof ctx).toBe("string");
     expect(ctx).toContain("Alice");
   });
@@ -185,7 +184,7 @@ describe("Phase 6 — prep card and draft context", () => {
       channel: "whatsapp" as const,
       notes: `Message ${i}`,
     }));
-    const ctx = buildDraftContext(contact, interactions, [], [], TODAY);
+    const ctx = buildDraftContext(contact, interactions, [], []);
     // Only first 3 interactions should appear — 4th+ messages should not overflow
     const count = (ctx.match(/Message /g) ?? []).length;
     expect(count).toBeLessThanOrEqual(3);
@@ -197,7 +196,7 @@ describe("Phase 6 — prep card and draft context", () => {
 describe("Phase 8 — reconnect context", () => {
   it("builds reconnect context string for a dormant contact", () => {
     const contact = makeReconnectContact();
-    const ctx = buildReconnectContext(contact, [], TODAY);
+    const ctx = buildReconnectContext(contact, []);
     expect(typeof ctx).toBe("string");
     expect(ctx).toContain("Bob");
     expect(ctx.length).toBeGreaterThan(50);
@@ -205,7 +204,7 @@ describe("Phase 8 — reconnect context", () => {
 
   it("describes a long gap in months", () => {
     const contact = makeReconnectContact({ last_contact: "2025-06-01" });
-    const ctx = buildReconnectContext(contact, [], TODAY);
+    const ctx = buildReconnectContext(contact, []);
     expect(ctx).toMatch(/month/i);
   });
 });

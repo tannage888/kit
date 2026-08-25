@@ -535,6 +535,122 @@ describe("generateContactFile", () => {
     expect(output).toContain("### 2026-03-01 — WhatsApp");
   });
 
+  it("orders same-date interactions newest-first by created_at", () => {
+    const sameDay: InteractionRow[] = [
+      { id: "i1", contact_id: "alice_example", notes: "Morning", date: "2026-04-01", created_at: "2026-04-01T09:00:00Z", channel: "whatsapp" },
+      { id: "i2", contact_id: "alice_example", notes: "Evening", date: "2026-04-01", created_at: "2026-04-01T20:00:00Z", channel: "whatsapp" },
+    ];
+    const output = generateContactFile(baseContact, [], sameDay);
+    expect(output.indexOf("Evening")).toBeLessThan(output.indexOf("Morning"));
+  });
+
+  it("orders same-date interactions identically regardless of input order", () => {
+    // A regenerate re-reads the log from Supabase, which gives no ordering
+    // guarantee within a date. Unstable output would reshuffle the file on
+    // every write.
+    const rows: InteractionRow[] = [
+      { id: "a", contact_id: "alice_example", notes: "First", date: "2026-04-01", created_at: "2026-04-01T09:00:00Z", channel: "whatsapp" },
+      { id: "b", contact_id: "alice_example", notes: "Second", date: "2026-04-01", created_at: "2026-04-01T12:00:00Z", channel: "whatsapp" },
+      { id: "c", contact_id: "alice_example", notes: "Third", date: "2026-04-01", created_at: "2026-04-01T18:00:00Z", channel: "whatsapp" },
+    ];
+    const forwards = generateContactFile(baseContact, [], rows);
+    const backwards = generateContactFile(baseContact, [], [...rows].reverse());
+    const shuffled = generateContactFile(baseContact, [], [rows[1], rows[2], rows[0]]);
+    expect(backwards).toBe(forwards);
+    expect(shuffled).toBe(forwards);
+  });
+
+  it("falls back to id when created_at is missing on same-date entries", () => {
+    const rows: InteractionRow[] = [
+      { id: "aaa", contact_id: "alice_example", notes: "Alpha", date: "2026-04-01", created_at: "", channel: "whatsapp" },
+      { id: "bbb", contact_id: "alice_example", notes: "Bravo", date: "2026-04-01", created_at: "", channel: "whatsapp" },
+    ];
+    const forwards = generateContactFile(baseContact, [], rows);
+    expect(forwards).toBe(generateContactFile(baseContact, [], [...rows].reverse()));
+  });
+
+  it("gives each group chat its own section", () => {
+    const rows: InteractionRow[] = [
+      { id: "i1", contact_id: "alice_example", notes: "Direct chat", date: "2026-04-01", created_at: "2026-04-01T09:00:00Z", channel: "whatsapp" },
+      { id: "i2", contact_id: "alice_example", notes: "Family news", date: "2026-04-02", created_at: "2026-04-02T09:00:00Z", channel: "whatsapp", group_jid: "111@g.us", group_name: "The Tan Family" },
+      { id: "i3", contact_id: "alice_example", notes: "Hobby talk", date: "2026-04-03", created_at: "2026-04-03T09:00:00Z", channel: "whatsapp", group_jid: "222@g.us", group_name: "Legion of 40K Chums!" },
+    ];
+    const output = generateContactFile(baseContact, [], rows);
+
+    expect(output).toContain("## Group: The Tan Family");
+    expect(output).toContain("## Group: Legion of 40K Chums!");
+    // The 1:1 log holds only the direct conversation.
+    const mainLog = output.slice(output.indexOf("## Interaction Log"), output.indexOf("## Group:"));
+    expect(mainLog).toContain("Direct chat");
+    expect(mainLog).not.toContain("Family news");
+    expect(mainLog).not.toContain("Hobby talk");
+  });
+
+  it("keeps every entry for one group inside that group's section", () => {
+    const rows: InteractionRow[] = [
+      { id: "a", contact_id: "alice_example", notes: "First family chat", date: "2026-04-01", created_at: "2026-04-01T09:00:00Z", channel: "whatsapp", group_jid: "111@g.us", group_name: "The Tan Family" },
+      { id: "b", contact_id: "alice_example", notes: "Second family chat", date: "2026-04-05", created_at: "2026-04-05T09:00:00Z", channel: "whatsapp", group_jid: "111@g.us", group_name: "The Tan Family" },
+    ];
+    const output = generateContactFile(baseContact, [], rows);
+
+    expect(output.match(/## Group: The Tan Family/g)).toHaveLength(1);
+    const section = output.slice(output.indexOf("## Group: The Tan Family"));
+    expect(section).toContain("First family chat");
+    expect(section).toContain("Second family chat");
+    // Newest first within the section.
+    expect(section.indexOf("Second family chat")).toBeLessThan(section.indexOf("First family chat"));
+  });
+
+  it("orders group sections by most recent activity", () => {
+    const rows: InteractionRow[] = [
+      { id: "a", contact_id: "alice_example", notes: "Stale", date: "2026-01-01", created_at: "2026-01-01T09:00:00Z", channel: "whatsapp", group_jid: "111@g.us", group_name: "Quiet Group" },
+      { id: "b", contact_id: "alice_example", notes: "Fresh", date: "2026-04-05", created_at: "2026-04-05T09:00:00Z", channel: "whatsapp", group_jid: "222@g.us", group_name: "Busy Group" },
+    ];
+    const output = generateContactFile(baseContact, [], rows);
+
+    expect(output.indexOf("## Group: Busy Group")).toBeLessThan(output.indexOf("## Group: Quiet Group"));
+  });
+
+  it("falls back to the JID when a group has no captured name", () => {
+    const rows: InteractionRow[] = [
+      { id: "a", contact_id: "alice_example", notes: "Unnamed", date: "2026-04-01", created_at: "2026-04-01T09:00:00Z", channel: "whatsapp", group_jid: "111@g.us" },
+    ];
+    expect(generateContactFile(baseContact, [], rows)).toContain("## Group: 111@g.us");
+  });
+
+  it("renders no group sections when there are no group interactions", () => {
+    const rows: InteractionRow[] = [
+      { id: "i1", contact_id: "alice_example", notes: "Direct only", date: "2026-04-01", created_at: "", channel: "whatsapp" },
+    ];
+    expect(generateContactFile(baseContact, [], rows)).not.toContain("## Group:");
+  });
+
+  it("keeps follow-ups attached to the main log, above the group sections", () => {
+    const rows: InteractionRow[] = [
+      { id: "a", contact_id: "alice_example", notes: "Family news", date: "2026-04-02", created_at: "", channel: "whatsapp", group_jid: "111@g.us", group_name: "The Tan Family" },
+    ];
+    const followUps: FollowUpRow[] = [
+      { id: "f1", contact_id: "alice_example", text: "Book dinner", completed: false, created_at: "" },
+    ];
+    const output = generateContactFile(baseContact, followUps, rows);
+
+    expect(output.indexOf("**Follow-ups:**")).toBeLessThan(output.indexOf("## Group:"));
+  });
+
+  it("parses only the 1:1 log back out, leaving group sections alone", () => {
+    // extractSection stops at the next "## ", so a group section must not
+    // bleed into the main interaction log on a round trip.
+    const rows: InteractionRow[] = [
+      { id: "i1", contact_id: "alice_example", notes: "Direct chat", date: "2026-04-01", created_at: "", channel: "whatsapp" },
+      { id: "i2", contact_id: "alice_example", notes: "Family news", date: "2026-04-02", created_at: "", channel: "whatsapp", group_jid: "111@g.us", group_name: "The Tan Family" },
+    ];
+    const output = generateContactFile(baseContact, [], rows);
+    const parsed = parseInteractionLog(output, "alice_example");
+
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].notes).toBe("Direct chat");
+  });
+
   it("renders pending follow-ups before completed ones with strikethrough", () => {
     const followUps: FollowUpRow[] = [
       { id: "f1", contact_id: "alice_example", text: "Done task", completed: true, created_at: "" },

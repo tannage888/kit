@@ -55,6 +55,10 @@ export interface InteractionRow {
   date: string;
   created_at: string;
   channel?: string | null;
+  /** Set when the interaction came from a group chat rather than a 1:1 thread. */
+  group_jid?: string | null;
+  /** Human-readable group name, captured at sweep time for the section heading. */
+  group_name?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -385,11 +389,14 @@ export function generateContactFile(
     lines.push("", "## Notes", "", contact.notes);
   }
 
+  // 1:1 conversations stay in the main log; group conversations get a section
+  // each, so a contact's own thread is never buried under chatter from every
+  // group they happen to share with you.
+  const direct = interactions.filter((i) => !i.group_jid);
+  const grouped = interactions.filter((i) => i.group_jid);
+
   lines.push("", "## Interaction Log");
-  const sorted = [...interactions].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  for (const interaction of sorted) {
+  for (const interaction of sortInteractions(direct)) {
     const label = fmChannelLabel(interaction.channel);
     lines.push("", `### ${interaction.date} — ${label}`, interaction.notes);
   }
@@ -403,5 +410,66 @@ export function generateContactFile(
     }
   }
 
+  for (const section of groupSections(grouped)) {
+    lines.push("", `## Group: ${section.name}`);
+    for (const interaction of section.interactions) {
+      const label = fmChannelLabel(interaction.channel);
+      lines.push("", `### ${interaction.date} — ${label}`, interaction.notes);
+    }
+  }
+
   return lines.join("\n") + "\n";
+}
+
+/**
+ * Newest first, with stable tie-breaks.
+ *
+ * `date` has no time component, so several entries routinely share one date —
+ * tie-break on created_at (insertion order matches the conversation order a
+ * sweep saw) and finally id, or the file reshuffles on every regenerate.
+ */
+function sortInteractions(interactions: InteractionRow[]): InteractionRow[] {
+  const msOf = (value: string | null | undefined): number => {
+    const ms = value ? new Date(value).getTime() : 0;
+    return Number.isFinite(ms) ? ms : 0;
+  };
+  return [...interactions].sort((a, b) => {
+    const byDate = msOf(b.date) - msOf(a.date);
+    if (byDate !== 0) return byDate;
+    const byCreated = msOf(b.created_at) - msOf(a.created_at);
+    if (byCreated !== 0) return byCreated;
+    return (b.id ?? "").localeCompare(a.id ?? "");
+  });
+}
+
+/**
+ * One section per group, most recently active first. Falls back to the JID
+ * when no name was captured, so a section is never headed by nothing.
+ */
+export function groupSections(
+  interactions: InteractionRow[]
+): Array<{ jid: string; name: string; interactions: InteractionRow[] }> {
+  const byJid = new Map<string, InteractionRow[]>();
+  for (const interaction of interactions) {
+    const jid = interaction.group_jid as string;
+    const bucket = byJid.get(jid);
+    if (bucket) bucket.push(interaction);
+    else byJid.set(jid, [interaction]);
+  }
+
+  return [...byJid.entries()]
+    .map(([jid, rows]) => {
+      const sorted = sortInteractions(rows);
+      return {
+        jid,
+        name: sorted.find((r) => r.group_name)?.group_name || jid,
+        interactions: sorted,
+      };
+    })
+    .sort((a, b) => {
+      const aDate = a.interactions[0]?.date ?? "";
+      const bDate = b.interactions[0]?.date ?? "";
+      if (aDate !== bDate) return aDate < bDate ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
 }

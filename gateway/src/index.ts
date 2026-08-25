@@ -93,7 +93,7 @@ async function main() {
 
   const webDist = path.resolve(__dirname, "../../web/dist");
   app.use(express.static(webDist));
-  app.get("*", (_req, res) => res.sendFile(path.join(webDist, "index.html")));
+  app.get(/.*/, (_req, res) => res.sendFile(path.join(webDist, "index.html")));
 
   app.listen(config.PORT, () => {
     console.log();

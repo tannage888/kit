@@ -39,6 +39,8 @@ import {
   dismissCapture,
   setContactActive,
   updateContactFields,
+  updateInteractionNotes,
+  getConversation,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -211,6 +213,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ["name", "tier", "frequency"],
+      },
+    },
+    {
+      name: "get-conversation",
+      description:
+        "Read the actual WhatsApp messages exchanged with a contact — the real transcript, " +
+        "not a summary. Use this when the user asks what someone actually said, wants to check " +
+        "the wording of an exchange, or needs detail the logged summary lost. Read-only: it " +
+        "stores nothing. Use sweep-now instead to pull new conversations in and log them.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_name: {
+            type: "string",
+            description: "Contact name or ID (partial name match is fine)",
+          },
+          days: {
+            type: "number",
+            description: "How many days back to read. Defaults to 14, maximum 365.",
+          },
+          limit: {
+            type: "number",
+            description:
+              "Maximum messages to return, most recent first-kept. Defaults to 200, maximum 1000.",
+          },
+        },
+        required: ["contact_name"],
       },
     },
     {
@@ -413,6 +442,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "string",
             description: "Free-form notes. Replaces the contact's existing notes.",
           },
+          origin_story: {
+            type: "string",
+            description:
+              "Background — how you know them, their role, context. Replaces the existing background.",
+          },
+          special_interests: {
+            type: "string",
+            description:
+              "Interests & hooks — things worth raising in conversation. Replaces the existing value.",
+          },
           whatsapp: {
             type: "string",
             description: "WhatsApp number in E.164 format (e.g. +447…), or empty string to clear.",
@@ -423,6 +462,44 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ["contact_name"],
+      },
+    },
+    {
+      name: "update-interaction",
+      description:
+        "Correct the notes on an interaction that has already been logged. Use this when a " +
+        "logged summary turns out to be wrong or incomplete — never edit the database by hand, " +
+        "because that leaves Open Brain holding the superseded version. This appends a " +
+        "correction to Open Brain alongside the original. To log a new conversation use " +
+        "log-interaction instead.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_name: {
+            type: "string",
+            description: "Contact name or ID (partial name match is fine)",
+          },
+          date: {
+            type: "string",
+            description: "ISO date (YYYY-MM-DD) of the interaction to correct.",
+          },
+          notes: {
+            type: "string",
+            description: "The corrected notes. Replaces the existing notes entirely.",
+          },
+          reason: {
+            type: "string",
+            description:
+              "Why the correction is being made — recorded in the Open Brain correction thought.",
+          },
+          interaction_id: {
+            type: "string",
+            description:
+              "Which interaction to correct, when several share the date. The tool lists the " +
+              "available ids if the date alone is ambiguous.",
+          },
+        },
+        required: ["contact_name", "date", "notes"],
       },
     },
   ],
@@ -567,6 +644,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(msg);
       }
 
+      case "get-conversation": {
+        const msg = await getConversation({
+          contact_name: String(args?.contact_name ?? ""),
+          days: args?.days as number | undefined,
+          limit: args?.limit as number | undefined,
+        });
+        return text(msg);
+      }
+
       case "sweep-now": {
         const msg = await sweepNow(
           args?.contact_name ? String(args.contact_name) : undefined
@@ -637,8 +723,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           tier: args?.tier as number | undefined,
           social_battery_cost: args?.social_battery_cost as string | undefined,
           notes: args?.notes as string | undefined,
+          origin_story: args?.origin_story as string | undefined,
+          special_interests: args?.special_interests as string | undefined,
           whatsapp: args?.whatsapp as string | undefined,
           active: args?.active as boolean | undefined,
+        });
+        return text(msg);
+      }
+
+      case "update-interaction": {
+        const msg = await updateInteractionNotes({
+          contact_name: String(args?.contact_name ?? ""),
+          date: String(args?.date ?? ""),
+          notes: String(args?.notes ?? ""),
+          reason: args?.reason as string | undefined,
+          interaction_id: args?.interaction_id as string | undefined,
         });
         return text(msg);
       }

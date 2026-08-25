@@ -61,6 +61,8 @@ function makeContact(overrides: Partial<TrackedContact> = {}): TrackedContact {
     instagram_username: null,
     instagram_capture: "disabled",
     whatsapp_groups: null,
+    url: null,
+    active: true,
     ...overrides,
   };
 }
@@ -73,6 +75,9 @@ function makeThread(contact: TrackedContact, messageCount = 3): ConversationThre
     body: `Message ${i}`,
     timestamp: now - (messageCount - i) * 60_000,
     messageId: `msg-${i}`,
+    // Inbound messages come from the contact. Group threads are only
+    // captured when the contact themselves spoke.
+    senderJid: i % 2 === 0 ? undefined : "447700900001@s.whatsapp.net",
   }));
   return {
     contact,
@@ -114,6 +119,9 @@ function makeScheduler(contacts: TrackedContact[], threads: ConversationThread[]
 
 describe("SweepScheduler", () => {
   beforeEach(() => {
+    // Vitest 4 no longer clears call history between tests — reset explicitly
+    mockSupabaseSingle.mockClear();
+    mockSupabaseUpsert.mockClear();
     mockSupabaseSingle.mockResolvedValue({ data: null, error: null });
     mockSupabaseUpsert.mockResolvedValue({ error: null });
     vi.useFakeTimers();
@@ -293,6 +301,29 @@ describe("SweepScheduler", () => {
 
     const [, , sinceMs] = mockFetcher.fetchSince.mock.calls[0];
     expect(sinceMs).toBe(storedTs);
+  });
+
+  it("skips a group thread the contact never spoke in", async () => {
+    // Groups are swept once per tracked member, so most threads contain none
+    // of this contact's own messages — filing those under their name would
+    // record other people's conversation as theirs.
+    const contact = makeContact({ whatsapp_groups: "120363199811716353@g.us" });
+    const silent = makeThread(contact);
+    for (const m of silent.messages) {
+      m.fromMe = false;
+      m.senderJid = "447700900999@s.whatsapp.net";
+    }
+    const { scheduler, mockCapture } = makeScheduler([contact], [[], [silent]]);
+
+    const result = await scheduler.runSweep();
+
+    expect(mockCapture.processAndCommit).not.toHaveBeenCalled();
+    expect(result?.threadsProcessed).toBe(0);
+    // The watermark still advances, so the thread is not re-examined forever.
+    expect(mockSupabaseUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ group_jid: "120363199811716353@g.us" }),
+      expect.any(Object)
+    );
   });
 
   it("sweeps group JIDs when whatsapp_groups is set", async () => {
