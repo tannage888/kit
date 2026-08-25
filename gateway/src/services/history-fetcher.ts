@@ -14,6 +14,7 @@
  */
 
 import { config } from "../config.js";
+import { normaliseMessages, type RawDaemonMessage } from "../utils/wa-messages.js";
 import type { ConversationThread, TrackedContact, WhatsAppMessage } from "../types.js";
 
 const MIN_THREAD_MESSAGES = 2;
@@ -49,35 +50,10 @@ export class HistoryFetcher {
     }
 
     // Daemon response shape: { messages: [{ id, timestamp(ISO), fromMe, body, ... }] }
-    // Map into the gateway's WhatsAppMessage shape (epoch-ms timestamp, messageId, remoteJid).
-    type RawMessage = {
-      id?: string;
-      messageId?: string;
-      timestamp: string | number;
-      fromMe: boolean;
-      body: string;
-      remoteJid?: string;
-    };
-    const body = (await res.json()) as { messages?: RawMessage[] };
-    const raw = body.messages ?? [];
-
-    // Dedup by messageId (daemon store occasionally returns duplicates)
-    const byId = new Map<string, WhatsAppMessage>();
-    for (const m of raw) {
-      const ts = typeof m.timestamp === "number" ? m.timestamp : Date.parse(m.timestamp);
-      if (!Number.isFinite(ts)) continue;
-      const id = m.messageId ?? m.id ?? "";
-      if (!byId.has(id)) {
-        byId.set(id, {
-          remoteJid: m.remoteJid ?? jid,
-          fromMe: m.fromMe,
-          body: m.body,
-          timestamp: ts,
-          messageId: id,
-        });
-      }
-    }
-    const allMessages = [...byId.values()];
+    // Normalised into the gateway's WhatsAppMessage shape (epoch-ms timestamp,
+    // messageId, remoteJid) — shared with the conversation endpoint.
+    const body = (await res.json()) as { messages?: RawDaemonMessage[] };
+    const allMessages = normaliseMessages(body.messages ?? [], jid);
 
     // Client-side watermark filter as a safety net
     const messages = allMessages.filter((m) => m.timestamp > sinceMs);

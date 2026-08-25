@@ -4,10 +4,12 @@
  * Supabase is the source of truth. This service renders People/*.md files
  * from Supabase data via Realtime postgres_changes subscriptions:
  *
- *   contacts UPDATE      → regenerate full markdown file via generateContactFile()
+ *   contacts UPDATE        → regenerate full markdown file via generateContactFile()
  *   interaction_log INSERT → prepend entry to ## Interaction Log
- *   follow_ups INSERT    → append bullet to **Follow-ups:**
- *   follow_ups UPDATE    → toggle ~~strikethrough~~ on bullet
+ *   interaction_log UPDATE → regenerate (a corrected entry can't be located
+ *                            by heading — date + channel isn't unique)
+ *   follow_ups INSERT      → append bullet to **Follow-ups:**
+ *   follow_ups UPDATE      → toggle ~~strikethrough~~ on bullet
  */
 
 import * as fs from "fs";
@@ -16,7 +18,6 @@ import { fileURLToPath } from "url";
 import { createClient, SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 import { config } from "../config.js";
 import {
-  slugify,
   parseContactFile,
   generateContactFile,
   prependInteractionEntry,
@@ -121,6 +122,11 @@ export class SyncService {
       )
       .on(
         "postgres_changes",
+        { event: "UPDATE", schema: "kit", table: "interaction_log" },
+        (payload) => void this.onInteractionUpdate(payload.new as any)
+      )
+      .on(
+        "postgres_changes",
         { event: "INSERT", schema: "kit", table: "follow_ups" },
         (payload) => this.onFollowUpInsert(payload.new as any)
       )
@@ -139,51 +145,32 @@ export class SyncService {
   }
 
   private async onContactUpdate(row: any): Promise<void> {
-    const contactId: string = row.id;
-
-    // Compute expected path and keep map current
-    const filePath = this.computeFilePath(row.tier, row.name);
-    this.contactFileMap.set(contactId, filePath);
-
     console.log(`☁️  → 📝 regenerate: ${row.name}`);
+    await this.regenerate(toContactRow(row));
+  }
+
+  /**
+   * Re-render a contact's whole markdown file from Supabase.
+   *
+   * Used whenever a surgical edit can't be aimed reliably — an interaction
+   * whose notes changed can't be located by heading alone, because a single
+   * date and channel can head several entries in the log.
+   */
+  private async regenerate(contact: ContactRow): Promise<void> {
+    // Compute expected path and keep map current
+    const filePath = this.computeFilePath(contact.tier, contact.name);
+    this.contactFileMap.set(contact.id, filePath);
 
     try {
       const [fuRes, intRes] = await Promise.all([
         this.supabase.schema("kit").from("follow_ups")
           .select("id, contact_id, text, completed, created_at")
-          .eq("contact_id", contactId),
+          .eq("contact_id", contact.id),
         this.supabase.schema("kit").from("interaction_log")
-          .select("id, contact_id, notes, date, created_at, channel")
-          .eq("contact_id", contactId)
+          .select("id, contact_id, notes, date, created_at, channel, group_jid, group_name")
+          .eq("contact_id", contact.id)
           .order("date", { ascending: false }),
       ]);
-
-      const contact: ContactRow = {
-        id: row.id,
-        name: row.name,
-        tier: row.tier,
-        frequency: row.frequency,
-        frequency_days: row.frequency_days ?? 30,
-        last_contact: row.last_contact ?? null,
-        next_action: row.next_action ?? null,
-        social_battery_cost: row.social_battery_cost ?? null,
-        origin_story: row.origin_story ?? null,
-        special_interests: row.special_interests ?? null,
-        sensitive_topics: row.sensitive_topics ?? null,
-        preferred_channel: row.preferred_channel ?? null,
-        birthday: row.birthday ?? null,
-        whatsapp_capture: row.whatsapp_capture === "enabled" ? "enabled" : "disabled",
-        notes: row.notes ?? null,
-        whatsapp: row.whatsapp ?? null,
-        linkedin_username: row.linkedin_username ?? null,
-        linkedin_capture: row.linkedin_capture === "enabled" ? "enabled" : "disabled",
-        instagram_username: row.instagram_username ?? null,
-        instagram_capture: row.instagram_capture === "enabled" ? "enabled" : "disabled",
-        whatsapp_groups: row.whatsapp_groups ?? null,
-        url: row.url ?? null,
-        wa_capture: row.wa_capture ?? null,
-        active: row.active ?? true,
-      };
 
       const followUps: FollowUpRow[] = (fuRes.data ?? []) as FollowUpRow[];
       const interactions: InteractionRow[] = (intRes.data ?? []) as InteractionRow[];
@@ -192,12 +179,19 @@ export class SyncService {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(filePath, generateContactFile(contact, followUps, interactions), "utf-8");
     } catch (err) {
-      console.error(`  ✗ contact render failed for ${row.name}:`, err);
+      console.error(`  ✗ contact render failed for ${contact.name}:`, err);
     }
   }
 
   private onInteractionInsert(row: any): void {
     const contactId: string = row.contact_id;
+
+    // A group interaction belongs in that group's own section, which the
+    // prepend fast-path cannot target — regenerate the file instead.
+    if (row.group_jid) {
+      void this.onInteractionUpdate(row);
+      return;
+    }
 
     const filePath = this.contactFileMap.get(contactId);
     if (!filePath || !fs.existsSync(filePath)) {
@@ -215,6 +209,30 @@ export class SyncService {
     } catch (err) {
       console.error(`  ✗ interaction append failed:`, err);
     }
+  }
+
+  /**
+   * An interaction changed, or a group interaction arrived. Both need the
+   * whole file re-rendered: a correction cannot be located by heading, and a
+   * group entry belongs under its own section rather than the main log.
+   */
+  private async onInteractionUpdate(row: any): Promise<void> {
+    const contactId: string = row.contact_id;
+
+    const { data, error } = await this.supabase
+      .schema("kit")
+      .from("contacts")
+      .select("*")
+      .eq("id", contactId)
+      .single();
+
+    if (error || !data) {
+      console.warn(`  ⚠️  interaction update: no contact row for "${contactId}"`);
+      return;
+    }
+
+    console.log(`☁️  → 📝 interaction corrected: ${contactId} (${row.date})`);
+    await this.regenerate(toContactRow(data));
   }
 
   private onFollowUpInsert(row: any): void {
@@ -255,6 +273,40 @@ export class SyncService {
     }
   }
 
+}
+
+/**
+ * Map a raw `kit.contacts` row (from Realtime or a select) onto ContactRow.
+ * Exported for testing — the rendering path is otherwise only reachable
+ * through a live Supabase connection.
+ */
+export function toContactRow(row: any): ContactRow {
+  return {
+    id: row.id,
+    name: row.name,
+    tier: row.tier,
+    frequency: row.frequency,
+    frequency_days: row.frequency_days ?? 30,
+    last_contact: row.last_contact ?? null,
+    next_action: row.next_action ?? null,
+    social_battery_cost: row.social_battery_cost ?? null,
+    origin_story: row.origin_story ?? null,
+    special_interests: row.special_interests ?? null,
+    sensitive_topics: row.sensitive_topics ?? null,
+    preferred_channel: row.preferred_channel ?? null,
+    birthday: row.birthday ?? null,
+    whatsapp_capture: row.whatsapp_capture === "enabled" ? "enabled" : "disabled",
+    notes: row.notes ?? null,
+    whatsapp: row.whatsapp ?? null,
+    linkedin_username: row.linkedin_username ?? null,
+    linkedin_capture: row.linkedin_capture === "enabled" ? "enabled" : "disabled",
+    instagram_username: row.instagram_username ?? null,
+    instagram_capture: row.instagram_capture === "enabled" ? "enabled" : "disabled",
+    whatsapp_groups: row.whatsapp_groups ?? null,
+    url: row.url ?? null,
+    wa_capture: row.wa_capture ?? null,
+    active: row.active ?? true,
+  };
 }
 
 function channelLabel(channel: string | null | undefined): string {

@@ -23,9 +23,11 @@ import { SweepScheduler } from "../services/sweep-scheduler.js";
 import { ImportIngestor } from "../services/import-ingestor.js";
 import { ContactCreator, type CreateContactInput } from "../services/contact-creator.js";
 import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
+import { normaliseMessages, toJid, type RawDaemonMessage } from "../utils/wa-messages.js";
 import { parseContactFile } from "../utils/markdown.js";
 import type { CaptureMode, Channel, GatewayStatus, TrackedContact } from "../types.js";
 import { EnergyService } from "../services/energy.js";
+import { MemoryStore } from "../services/memory-store.js";
 // Lazy import — mcp/tools.ts calls requireEnv() at module load;
 // importing it lazily avoids failures in test environments where env vars aren't set.
 let _kitTools: typeof import("../mcp/tools.js") | null = null;
@@ -55,6 +57,8 @@ export function createApiRouter(
   const api = Router();
   const creator = new ContactCreator(contacts);
   const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
+  const memoryStore = new MemoryStore(supabase, config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
+  const OPEN_BRAIN_ENABLED = Boolean(config.OPEN_BRAIN_URL);
 
   // ── Health / status ──────────────────────────────────────
 
@@ -128,7 +132,7 @@ export function createApiRouter(
     const id = req.params["id"] as string;
     const [contactRes, interactionsRes, followUpsRes] = await Promise.all([
       supabase.schema("kit").from("contacts").select("*").eq("id", id).single(),
-      supabase.schema("kit").from("interaction_log").select("id, date, notes, channel").eq("contact_id", id).order("date", { ascending: false }).limit(20),
+      supabase.schema("kit").from("interaction_log").select("id, date, notes, channel, group_jid, group_name").eq("contact_id", id).order("date", { ascending: false }).limit(20),
       supabase.schema("kit").from("follow_ups").select("id, text, completed, created_at").eq("contact_id", id).order("completed").order("created_at", { ascending: false }),
     ]);
     if (!contactRes.data) { res.status(404).json({ error: "contact_not_found" }); return; }
@@ -138,6 +142,68 @@ export function createApiRouter(
   api.post("/contacts/refresh", async (_req: Request, res: Response) => {
     const count = await contacts.loadFromDatabase();
     res.json({ ok: true, count });
+  });
+
+  /**
+   * Reconcile each contact's group membership from the daemon.
+   *
+   * whatsapp_groups drives the group branch of the sweep, and as a manual
+   * field it stayed empty for every contact — so that branch never ran.
+   * `dry_run` reports what would change without writing.
+   */
+  api.post("/contacts/sync-groups", async (req: Request, res: Response) => {
+    const dryRun = req.body?.dry_run === true;
+    // Optional partial-name filter, so membership can be switched on for one
+    // contact at a time rather than all of them at once.
+    const only = typeof req.body?.contact_name === "string"
+      ? req.body.contact_name.toLowerCase()
+      : null;
+    const results: Array<{ contact: string; groups: string[]; changed: boolean }> = [];
+
+    try {
+      for (const contact of contacts.getAll()) {
+        if (!contact.whatsapp) continue;
+        if (only && !contact.name.toLowerCase().includes(only)) continue;
+
+        const identifier = contact.whatsapp.replace(/\s+/g, "");
+        const response = await fetch(
+          `${config.EXTERNAL_GATEWAY_URL}/api/contacts/${encodeURIComponent(identifier)}/chats`
+        );
+        if (!response.ok) continue;
+
+        const body = (await response.json()) as { chats?: Array<{ chatJid: string }> };
+        const jids = (body.chats ?? [])
+          .map((c) => c.chatJid)
+          .filter((j) => j.endsWith("@g.us"))
+          .sort();
+
+        const next = jids.join(",");
+        const changed = next !== (contact.whatsapp_groups ?? "");
+        results.push({ contact: contact.name, groups: jids, changed });
+
+        if (changed && !dryRun) {
+          const { error } = await supabase
+            .schema("kit")
+            .from("contacts")
+            .update({ whatsapp_groups: next || null })
+            .eq("id", contact.id);
+          if (error) throw new Error(`${contact.name}: ${error.message}`);
+        }
+      }
+
+      if (!dryRun && results.some((r) => r.changed)) await contacts.loadFromDatabase();
+
+      res.json({
+        ok: true,
+        dryRun,
+        contactsChecked: results.length,
+        contactsChanged: results.filter((r) => r.changed).length,
+        totalGroupLinks: results.reduce((n, r) => n + r.groups.length, 0),
+        results,
+      });
+    } catch (err: any) {
+      res.status(502).json({ error: "sync_failed", detail: err.message });
+    }
   });
 
   // Create a new contact: writes markdown, upserts Supabase, registers in
@@ -490,6 +556,93 @@ export function createApiRouter(
     }
   });
 
+  // ── Conversation transcript (read-only proxy to daemon) ───
+
+  const conversationQuerySchema = z.object({
+    days: z.coerce.number().int().min(1).max(365).default(14),
+    limit: z.coerce.number().int().min(1).max(1000).default(200),
+  });
+
+  /**
+   * Return the raw message transcript for a contact.
+   *
+   * Read-only by design: nothing here writes to Supabase, Open Brain or the
+   * markdown file. It exists so the user can ask what someone actually said,
+   * rather than reading a summary of a summary.
+   */
+  api.get("/contacts/:id/conversation", async (req: Request, res: Response) => {
+    const parsed = conversationQuerySchema.safeParse(req.query);
+    if (!parsed.success) { res.status(400).json({ error: "invalid_query", details: parsed.error.issues }); return; }
+    const { days, limit } = parsed.data;
+
+    const contact = contacts.getById(req.params["id"] as string);
+    if (!contact) { res.status(404).json({ error: "contact_not_found" }); return; }
+    if (!contact.whatsapp) { res.status(409).json({ error: "no_whatsapp_number" }); return; }
+    // `off` is the strongest opt-out the contact record carries. Reading the
+    // transcript stores nothing, but honouring the flag keeps one switch
+    // meaningful across every path that touches someone's messages.
+    if (contact.wa_capture === "off") { res.status(403).json({ error: "capture_disabled" }); return; }
+
+    const jid = toJid(contact.whatsapp);
+    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const url = `${config.EXTERNAL_GATEWAY_URL}/api/chats/${encodeURIComponent(jid)}/messages?from=${encodeURIComponent(from)}`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        res.status(502).json({ error: "daemon_error", status: response.status }); return;
+      }
+      const body = await response.json() as { messages?: RawDaemonMessage[] };
+      const all = normaliseMessages(body.messages ?? [], jid);
+
+      // Keep the most recent `limit` — a truncated tail is the useful half
+      // when the question is "what did they just say?"
+      const messages = all.slice(-limit);
+      res.json({
+        contact: { id: contact.id, name: contact.name },
+        from,
+        to: new Date().toISOString(),
+        total: all.length,
+        returned: messages.length,
+        truncated: all.length > messages.length,
+        messages,
+      });
+    } catch (err: any) {
+      res.status(502).json({ error: "daemon_unavailable", detail: err.message });
+    }
+  });
+
+  // ── Send (proxy to daemon) ────────────────────────────────
+
+  const sendSchema = z.object({
+    to: z.string().regex(/^\+[1-9]\d{6,14}$/, "must be E.164 format"),
+    text: z.string().min(1),
+  });
+
+  api.post("/send", async (req: Request, res: Response) => {
+    const parsed = sendSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "invalid_body", details: parsed.error.issues }); return; }
+    const { to, text } = parsed.data;
+    try {
+      const response = await fetch(`${config.EXTERNAL_GATEWAY_URL}/api/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ to, text }] }),
+      });
+      const data: any = await response.json();
+      if (response.status === 503 || data?.error === "whatsapp_not_initialised") {
+        res.status(503).json({ error: "whatsapp_not_initialised" }); return;
+      }
+      if (!response.ok) {
+        res.status(502).json({ error: "daemon_error", detail: data }); return;
+      }
+      const result = data?.results?.[0];
+      res.json({ ok: true, messageId: result?.messageId ?? null });
+    } catch (err: any) {
+      res.status(502).json({ error: "daemon_unavailable", detail: err.message });
+    }
+  });
+
   // ── Chat (Claude + Kit tools) ────────────────────────────
 
   const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
@@ -504,6 +657,7 @@ export function createApiRouter(
     { name: "kit-daily-checkin", description: "Run daily check-in: who to reach out to today based on energy level.", input_schema: { type: "object", properties: {}, required: [] } },
     { name: "kit-set-energy", description: "Set social energy level for today (high/medium/low).", input_schema: { type: "object", properties: { level: { type: "string", enum: ["high", "medium", "low"] } }, required: ["level"] } },
     { name: "kit-get-energy", description: "Check today's energy level.", input_schema: { type: "object", properties: {}, required: [] } },
+    { name: "get-conversation", description: "Read the actual WhatsApp messages exchanged with a contact — the real transcript, not a summary. Read-only.", input_schema: { type: "object", properties: { contact_name: { type: "string" }, days: { type: "number" }, limit: { type: "number" } }, required: ["contact_name"] } },
     { name: "sweep-now", description: "Pull recent WhatsApp history and summarise conversations.", input_schema: { type: "object", properties: { contact_name: { type: "string" } }, required: [] } },
     { name: "kit-prep-card", description: "Pre-flight brief before reaching out to a contact.", input_schema: { type: "object", properties: { contact_name: { type: "string" } }, required: ["contact_name"] } },
     { name: "kit-draft-context", description: "Context for drafting a message to a contact.", input_schema: { type: "object", properties: { contact_name: { type: "string" }, intent: { type: "string" } }, required: ["contact_name"] } },
@@ -513,6 +667,7 @@ export function createApiRouter(
     { name: "kit-dismiss-capture", description: "Dismiss a pending capture.", input_schema: { type: "object", properties: { contact_id: { type: "string" } }, required: ["contact_id"] } },
     { name: "create-contact", description: "Create a new contact.", input_schema: { type: "object", properties: { name: { type: "string" }, tier: { type: "number", enum: [1, 2, 3] }, frequency: { type: "string" }, origin_story: { type: "string" }, notes: { type: "string" }, whatsapp: { type: "string" } }, required: ["name", "tier", "frequency"] } },
     { name: "set-contact-active", description: "Mark a contact active or inactive.", input_schema: { type: "object", properties: { contact_name: { type: "string" }, active: { type: "boolean" } }, required: ["contact_name", "active"] } },
+    { name: "kit-send-message", description: "Send a WhatsApp message to a contact.", input_schema: { type: "object", properties: { contact_name: { type: "string" }, text: { type: "string" } }, required: ["contact_name", "text"] } },
   ] as Anthropic.Tool[];
 
   async function dispatchChatTool(name: string, args: Record<string, unknown>): Promise<string> {
@@ -527,6 +682,7 @@ export function createApiRouter(
       case "kit-daily-checkin": return t.dailyCheckin();
       case "kit-set-energy": return t.setEnergy(String(args.level ?? ""));
       case "kit-get-energy": return t.getEnergy();
+      case "get-conversation": return t.getConversation({ contact_name: String(args.contact_name ?? ""), days: args.days as number | undefined, limit: args.limit as number | undefined });
       case "sweep-now": return t.sweepNow(args.contact_name ? String(args.contact_name) : undefined);
       case "kit-prep-card": return t.kitPrepCard(String(args.contact_name ?? ""));
       case "kit-draft-context": return t.kitDraftContext(String(args.contact_name ?? ""), args.intent ? String(args.intent) : undefined);
@@ -536,6 +692,27 @@ export function createApiRouter(
       case "kit-dismiss-capture": return t.dismissCapture(String(args.contact_id ?? ""));
       case "create-contact": return t.createContact({ name: String(args.name ?? ""), tier: (args.tier ?? 3) as 1 | 2 | 3, frequency: String(args.frequency ?? "Monthly"), origin_story: args.origin_story ? String(args.origin_story) : undefined, notes: args.notes ? String(args.notes) : undefined, whatsapp: args.whatsapp ? String(args.whatsapp) : undefined });
       case "set-contact-active": return t.setContactActive(String(args.contact_name ?? ""), Boolean(args.active));
+      case "kit-send-message": {
+        const contactName = String(args.contact_name ?? "");
+        const text = String(args.text ?? "");
+        const contact = contacts.findByName(contactName);
+        if (!contact) return `No contact found for "${contactName}"`;
+        if (!contact.whatsapp) return `${contactName} has no WhatsApp number on file`;
+        try {
+          const response = await fetch(`${config.EXTERNAL_GATEWAY_URL}/api/send`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: [{ to: contact.whatsapp, text }] }),
+          });
+          const data: any = await response.json();
+          if (response.status === 503 || data?.error === "whatsapp_not_initialised") return "WhatsApp is not connected — reconnect the daemon and try again";
+          if (!response.ok) return `Send failed: ${JSON.stringify(data)}`;
+          const result = data?.results?.[0];
+          return JSON.stringify({ ok: true, messageId: result?.messageId ?? null });
+        } catch (err: any) {
+          return `WhatsApp daemon unavailable: ${err.message}`;
+        }
+      }
       default: return `Unknown tool: ${name}`;
     }
   }
@@ -550,13 +727,76 @@ export function createApiRouter(
     if (!parsed.success) { res.status(400).json({ error: "invalid_body", details: parsed.error.issues }); return; }
 
     const today = new Date().toISOString().slice(0, 10);
+    const lastUserMessage = parsed.data.message;
+
+    // Step 4: enrich system prompt with memories before the Anthropic call
+    let memorySection = "";
+    try {
+      const generalMemories = await memoryStore.search(lastUserMessage, { limit: 6 });
+
+      // Check if any contact name is mentioned in the message
+      const allContacts = contacts.getAll();
+      const mentionedContact = allContacts.find((c) =>
+        lastUserMessage.toLowerCase().includes(c.name.toLowerCase())
+      );
+      let contactMemories: typeof generalMemories = [];
+      if (mentionedContact) {
+        contactMemories = await memoryStore.search(lastUserMessage, { contactId: mentionedContact.id, limit: 4 });
+      }
+
+      const combined = [...generalMemories, ...contactMemories.filter((cm) => !generalMemories.some((gm) => gm.id === cm.id))];
+      if (combined.length > 0) {
+        const lines = combined.map((m) => {
+          const date = m.createdAt.slice(0, 10);
+          return `- [${m.category}] ${m.content} (${m.source}, ${date})`;
+        });
+        memorySection = `\n\n## What Kit remembers\n${lines.join("\n")}`;
+      }
+    } catch {
+      // Non-fatal: proceed without memories if embed/search fails
+    }
+
+    // Step 8: include Open Brain results if enabled
+    let openBrainSection = "";
+    if (OPEN_BRAIN_ENABLED && config.OPEN_BRAIN_URL && config.OPEN_BRAIN_SERVICE_KEY) {
+      try {
+        const obSupabase = createClient(config.OPEN_BRAIN_URL, config.OPEN_BRAIN_SERVICE_KEY);
+        const [embedding] = await memoryStore.embedTexts([lastUserMessage]);
+        const embeddingStr = `[${embedding.join(",")}]`;
+        const { data: obData } = await (obSupabase as any).rpc("match_thoughts", {
+          query_embedding: embeddingStr,
+          match_threshold: 0.4,
+          match_count: 5,
+        }).catch(() => ({ data: null }));
+
+        // Fallback: full-text search if rpc fails or returns nothing
+        let results: { id: string; content: string; created_at: string; similarity?: number }[] = obData ?? [];
+        if (results.length === 0) {
+          const { data: ftData } = await obSupabase
+            .from("thoughts")
+            .select("id, content, created_at")
+            .textSearch("content", lastUserMessage.split(" ").slice(0, 5).join(" & "), { type: "websearch" })
+            .limit(5);
+          results = ftData ?? [];
+        }
+
+        const filtered = results.filter((r) => !r.similarity || r.similarity > 0.4);
+        if (filtered.length > 0) {
+          const lines = filtered.map((r) => `- ${r.content} (${r.created_at.slice(0, 10)})`);
+          openBrainSection = `\n\n## From Open Brain (raw captures)\n${lines.join("\n")}`;
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+
     const systemPrompt = `You are Kit, a relationship management assistant for a neurodivergent user (autism/ADHD). You help them maintain relationships by tracking contacts, logging interactions, and surfacing who to reach out to.
 
-Today is ${today}. You have access to their contact database and WhatsApp history via tools. Use tools to answer questions accurately rather than guessing. Keep responses concise and practical.`;
+Today is ${today}. You have access to their contact database and WhatsApp history via tools. Use tools to answer questions accurately rather than guessing. Keep responses concise and practical.${memorySection}${openBrainSection}`;
 
     const messages: Anthropic.MessageParam[] = [
       ...(parsed.data.history ?? []).map((h) => ({ role: h.role, content: h.content })),
-      { role: "user", content: parsed.data.message },
+      { role: "user", content: lastUserMessage },
     ];
 
     const toolCalls: { name: string; input: Record<string, unknown>; result: string }[] = [];
@@ -596,9 +836,133 @@ Today is ${today}. You have access to their contact database and WhatsApp histor
         }
       }
 
+      // Step 5: async memory capture — extract new facts from this exchange
+      if (reply) {
+        const exchange = `User: ${lastUserMessage}\nAssistant: ${reply}`;
+        void (async () => {
+          try {
+            const extractResp = await anthropic.messages.create({
+              model: "claude-haiku-4-5-20251001",
+              max_tokens: 256,
+              messages: [{
+                role: "user",
+                content: `Extract new facts about the user or their contacts from this exchange.\nOutput one fact per line as: [category]|[contact_name or 'user']|fact\nCategories: contact_fact, life_event, preference, interaction_insight\nOnly extract genuinely new information. If nothing new, output NONE.\n\n${exchange}`,
+              }],
+            });
+            const text = extractResp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
+            if (text === "NONE" || !text) return;
+            for (const line of text.split("\n")) {
+              const parts = line.split("|");
+              if (parts.length < 3) continue;
+              const [rawCat, rawName, ...factParts] = parts;
+              const category = rawCat.replace(/[[\]]/g, "").trim() as any;
+              const nameOrUser = rawName.trim();
+              const fact = factParts.join("|").trim();
+              if (!fact || !["contact_fact", "life_event", "preference", "interaction_insight"].includes(category)) continue;
+              let contactId: string | undefined;
+              if (nameOrUser !== "user") {
+                const found = contacts.getAll().find((c) => c.name.toLowerCase() === nameOrUser.toLowerCase());
+                if (found) contactId = found.id;
+              }
+              await memoryStore.remember(fact, category, "chat", contactId);
+            }
+          } catch {
+            // Non-fatal background task
+          }
+        })();
+      }
+
       res.json({ reply, tool_calls: toolCalls });
     } catch (err: any) {
       res.status(500).json({ error: "chat_failed", detail: err.message });
+    }
+  });
+
+  // ── Memories (Step 6) ───────────────────────────────────
+
+  const memorySchema = z.object({
+    content: z.string().min(1),
+    category: z.enum(["contact_fact", "life_event", "preference", "interaction_insight"]),
+    source: z.enum(["chat", "sweep", "manual"]),
+    contactId: z.string().optional(),
+  });
+
+  api.post("/memories", async (req: Request, res: Response) => {
+    const parsed = memorySchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "invalid_body", details: parsed.error.issues }); return; }
+    try {
+      await memoryStore.remember(parsed.data.content, parsed.data.category, parsed.data.source, parsed.data.contactId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "memory_store_failed", detail: err.message });
+    }
+  });
+
+  api.get("/memories/search", async (req: Request, res: Response) => {
+    const q = String(req.query["q"] ?? "").trim();
+    if (!q) { res.status(400).json({ error: "q_required" }); return; }
+    const contactId = req.query["contactId"] ? String(req.query["contactId"]) : undefined;
+    const limit = req.query["limit"] ? Number(req.query["limit"]) : 10;
+    try {
+      const results = await memoryStore.search(q, { contactId, limit });
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ error: "memory_search_failed", detail: err.message });
+    }
+  });
+
+  // ── Open Brain (Steps 7-8) ───────────────────────────────
+
+  api.get("/openbrain/status", (_req: Request, res: Response) => {
+    res.json({ enabled: OPEN_BRAIN_ENABLED });
+  });
+
+  api.get("/openbrain/search", async (req: Request, res: Response) => {
+    if (!OPEN_BRAIN_ENABLED || !config.OPEN_BRAIN_URL || !config.OPEN_BRAIN_SERVICE_KEY) {
+      res.json({ results: [], enabled: false });
+      return;
+    }
+    const q = String(req.query["q"] ?? "").trim();
+    if (!q) { res.status(400).json({ error: "q_required" }); return; }
+    const limit = req.query["limit"] ? Number(req.query["limit"]) : 10;
+    try {
+      const obSupabase = createClient(config.OPEN_BRAIN_URL, config.OPEN_BRAIN_SERVICE_KEY);
+      const [embedding] = await memoryStore.embedTexts([q]);
+      const embeddingStr = `[${embedding.join(",")}]`;
+
+      // Try cosine similarity search first
+      const { data: vecData, error: vecError } = await (obSupabase as any).rpc("match_thoughts", {
+        query_embedding: embeddingStr,
+        match_threshold: 0.0,
+        match_count: limit,
+      });
+
+      let results: { id: string; content: string; createdAt: string; similarity?: number }[] = [];
+      if (!vecError && vecData && vecData.length > 0) {
+        results = (vecData as any[]).map((r) => ({
+          id: r.id,
+          content: r.content,
+          createdAt: r.created_at,
+          similarity: r.similarity,
+        }));
+      } else {
+        // Fallback: full-text search
+        const words = q.split(/\s+/).slice(0, 5).join(" & ");
+        const { data: ftData } = await obSupabase
+          .from("thoughts")
+          .select("id, content, created_at")
+          .textSearch("content", words, { type: "websearch" })
+          .limit(limit);
+        results = (ftData ?? []).map((r: any) => ({
+          id: r.id,
+          content: r.content,
+          createdAt: r.created_at,
+        }));
+      }
+
+      res.json({ results, enabled: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "openbrain_search_failed", detail: err.message });
     }
   });
 

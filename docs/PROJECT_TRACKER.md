@@ -14,7 +14,8 @@ shared_resources:
   - port_3141
   - port_3142
 
-current_stage: kit-memories
+current_stage: done
+status: done
 
 daemon_pin:
   repo: C:\dev\claude_whatsapp_integration
@@ -736,12 +737,12 @@ human_tasks:
     what: "Merge the GET /api/groups PR from claude_whatsapp_integration before gateway-api-expansion dispatches — the gateway proxies to that endpoint."
     done: true
 last_dispatch:
-  task_id: "kit-0101187d"
+  task_id: "kit-d4af8ae3"
   stage: "group-sweep"
   model: "sonnet"
   loop: "ralph"
-  started: "2026-05-18T07:55:58"
-  ended: "2026-05-18T08:17:07"
+  started: "2026-06-14T17:21:54"
+  ended: "2026-06-14T17:23:32"
   result: "done"
   iterations_used: 1
   tokens: { input: 0, output: 0, cost_usd: 0 }

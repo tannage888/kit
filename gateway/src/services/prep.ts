@@ -27,6 +27,8 @@ export interface PrepInteraction {
   date: string;
   channel: string | null;
   notes: string | null;
+  /** Group name when this came from a group chat rather than a direct one. */
+  group_name?: string | null;
 }
 
 export interface PrepFollowUp {
@@ -46,7 +48,8 @@ export function buildPrepCard(
   contact: PrepContact,
   recentInteractions: PrepInteraction[],
   openFollowUps: PrepFollowUp[],
-  brainContext: PrepBrainContext[]
+  brainContext: PrepBrainContext[],
+  groupInteractions: PrepInteraction[] = []
 ): string {
   const tierLabel = ["", "Inner Circle", "Active", "Business"][contact.tier] ?? `Tier ${contact.tier}`;
   const lines: string[] = [
@@ -88,6 +91,17 @@ export function buildPrepCard(
     for (const i of recentInteractions) {
       const channel = i.channel ? ` (${i.channel})` : "";
       lines.push(`- **${i.date}**${channel}: ${i.notes ?? ""}`);
+    }
+    lines.push("");
+  }
+
+  // Group activity is kept in its own section and explicitly labelled. Read as
+  // a direct conversation it would suggest you have spoken when you have not.
+  if (groupInteractions.length > 0) {
+    lines.push("### Recent group activity (not direct conversation)");
+    for (const i of groupInteractions) {
+      const where = i.group_name ? ` in ${i.group_name}` : "";
+      lines.push(`- **${i.date}**${where}: ${i.notes ?? ""}`);
     }
     lines.push("");
   }

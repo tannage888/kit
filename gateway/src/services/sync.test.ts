@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+vi.mock("../config.js", () => ({
+  config: { SUPABASE_URL: "http://localhost", SUPABASE_SERVICE_KEY: "test-key" },
+}));
+
+import { toContactRow } from "./sync.js";
+
 /**
  * Tests for the SyncService loop-guard logic.
  *
@@ -119,7 +125,6 @@ describe("Bidirectional loop prevention", () => {
 
   it("md→db guard blocks db→md handler", () => {
     const mdToDb = new LoopGuard();
-    const dbToMd = new LoopGuard();
 
     // Simulate markdown change triggering Supabase write
     mdToDb.set("contact_a");
@@ -131,7 +136,6 @@ describe("Bidirectional loop prevention", () => {
   });
 
   it("db→md guard blocks md→db handler", () => {
-    const mdToDb = new LoopGuard();
     const dbToMd = new LoopGuard();
 
     // Simulate Supabase event writing to markdown
@@ -154,5 +158,53 @@ describe("Bidirectional loop prevention", () => {
 
     // contact_b was never guarded
     expect(mdToDb.has("contact_b")).toBe(false);
+  });
+});
+
+// ── Row mapping (shared by contacts UPDATE and interaction_log UPDATE) ────────
+
+describe("toContactRow", () => {
+  const minimal = { id: "alice", name: "Alice", tier: 1, frequency: "Monthly" };
+
+  it("copies the identifying fields through unchanged", () => {
+    const row = toContactRow({ ...minimal, whatsapp: "+447700900001" });
+    expect(row.id).toBe("alice");
+    expect(row.name).toBe("Alice");
+    expect(row.tier).toBe(1);
+    expect(row.frequency).toBe("Monthly");
+    expect(row.whatsapp).toBe("+447700900001");
+  });
+
+  it("defaults absent optional columns to null rather than undefined", () => {
+    const row = toContactRow(minimal);
+    // generateContactFile() omits null fields but would render "undefined"
+    expect(row.origin_story).toBeNull();
+    expect(row.special_interests).toBeNull();
+    expect(row.notes).toBeNull();
+    expect(row.whatsapp_groups).toBeNull();
+    expect(row.url).toBeNull();
+    expect(row.last_contact).toBeNull();
+  });
+
+  it("defaults frequency_days to 30 and active to true", () => {
+    const row = toContactRow(minimal);
+    expect(row.frequency_days).toBe(30);
+    expect(row.active).toBe(true);
+  });
+
+  it("preserves an explicit active: false", () => {
+    expect(toContactRow({ ...minimal, active: false }).active).toBe(false);
+  });
+
+  it("coerces capture columns to the enabled/disabled enum", () => {
+    const row = toContactRow({
+      ...minimal,
+      whatsapp_capture: "enabled",
+      linkedin_capture: null,
+      instagram_capture: "something else",
+    });
+    expect(row.whatsapp_capture).toBe("enabled");
+    expect(row.linkedin_capture).toBe("disabled");
+    expect(row.instagram_capture).toBe("disabled");
   });
 });

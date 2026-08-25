@@ -38,6 +38,11 @@ export interface Message {
   body: string;
   timestamp: number; // Unix epoch ms
   messageId: string;
+  /**
+   * Who sent it. Only meaningful for group threads, where every message
+   * would otherwise be misattributed to the tracked contact.
+   */
+  senderJid?: string;
 }
 
 /** WhatsApp-specific message — extends Message with JID for registry lookup */
@@ -54,6 +59,7 @@ export interface ConversationThread {
   lastActivityAt: number; // epoch ms of most recent message
   channel: Channel;
   groupJid?: string; // set when this thread came from a group chat sweep
+  groupName?: string; // display name for the group, used as the file section heading
 }
 
 // ── Capture result (from Claude summarisation) ─────────────
@@ -67,6 +73,9 @@ export interface CaptureResult {
   channel: Channel;
   /** Raw summary text for the review card */
   summary: string;
+  /** Set when the capture came from a group chat — drives its own file section. */
+  groupJid?: string;
+  groupName?: string;
 }
 
 // ── Open Brain memory ──────────────────────────────────────

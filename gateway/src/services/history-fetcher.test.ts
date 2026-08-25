@@ -37,6 +37,9 @@ const contact: TrackedContact = {
   linkedin_capture: "disabled",
   instagram_username: null,
   instagram_capture: "disabled",
+  whatsapp_groups: null,
+  url: null,
+  active: true,
 };
 
 function fakeMsg(

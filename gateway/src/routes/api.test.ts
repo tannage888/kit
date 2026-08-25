@@ -6,7 +6,7 @@
  *   GET  /api/status           — proxies daemon connection state
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 import { createApiRouter } from "./api.js";
@@ -271,5 +271,271 @@ describe("GET /api/status", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.connection).toBe("unavailable");
+  });
+});
+
+describe("POST /api/send", () => {
+  it("proxies to daemon and returns messageId", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ results: [{ to: "+447700900123", status: "sent", messageId: "msg-xyz-1" }] }),
+    } as unknown as Response);
+
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ to: "+447700900123", text: "Hey!" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.messageId).toBe("msg-xyz-1");
+  });
+
+  it("returns 400 for missing to field", async () => {
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ text: "Hey!" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_body");
+  });
+
+  it("returns 400 for invalid E.164 number", async () => {
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ to: "07700900123", text: "Hey!" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_body");
+  });
+
+  it("returns 400 for empty text", async () => {
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ to: "+447700900123", text: "" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_body");
+  });
+
+  it("returns 503 when daemon returns whatsapp_not_initialised", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "whatsapp_not_initialised" }),
+    } as unknown as Response);
+
+    const { app } = makeRouter();
+    const res = await request(app).post("/api/send").send({ to: "+447700900123", text: "Hey!" });
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe("whatsapp_not_initialised");
+  });
+});
+
+// ── GET /api/contacts/:id/conversation ────────────────────────────────────────
+
+describe("GET /api/contacts/:id/conversation", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const CONTACT = {
+    id: "kat_osman",
+    name: "Kat Osman",
+    whatsapp: "+44 7931 460 181",
+    wa_capture: "on_demand",
+  };
+
+  function daemonReturns(messages: unknown[]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ messages }),
+      })
+    );
+  }
+
+  it("returns the transcript for a tracked contact", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getById.mockReturnValue(CONTACT);
+    daemonReturns([
+      { id: "m1", timestamp: "2026-08-20T12:00:00.000Z", fromMe: false, body: "Hello" },
+      { id: "m2", timestamp: "2026-08-20T12:05:00.000Z", fromMe: true, body: "Hi back" },
+    ]);
+
+    const res = await request(app).get("/api/contacts/kat_osman/conversation");
+
+    expect(res.status).toBe(200);
+    expect(res.body.contact.name).toBe("Kat Osman");
+    expect(res.body.messages).toHaveLength(2);
+    expect(res.body.messages[0].body).toBe("Hello");
+    expect(res.body.truncated).toBe(false);
+  });
+
+  it("builds the daemon JID from a number containing spaces", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getById.mockReturnValue(CONTACT);
+    daemonReturns([]);
+
+    await request(app).get("/api/contacts/kat_osman/conversation");
+
+    const calledUrl = (globalThis.fetch as any).mock.calls[0][0] as string;
+    expect(calledUrl).toContain(encodeURIComponent("447931460181@s.whatsapp.net"));
+  });
+
+  it("keeps the most recent messages when over the limit", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getById.mockReturnValue(CONTACT);
+    daemonReturns(
+      Array.from({ length: 5 }, (_, i) => ({
+        id: `m${i}`,
+        timestamp: new Date(Date.UTC(2026, 7, 20, 12, i)).toISOString(),
+        fromMe: false,
+        body: `Message ${i}`,
+      }))
+    );
+
+    const res = await request(app).get("/api/contacts/kat_osman/conversation?limit=2");
+
+    expect(res.body.total).toBe(5);
+    expect(res.body.returned).toBe(2);
+    expect(res.body.truncated).toBe(true);
+    expect(res.body.messages.map((m: any) => m.body)).toEqual(["Message 3", "Message 4"]);
+  });
+
+  it("refuses when capture is switched off for the contact", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getById.mockReturnValue({ ...CONTACT, wa_capture: "off" });
+    daemonReturns([]);
+
+    const res = await request(app).get("/api/contacts/kat_osman/conversation");
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("capture_disabled");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("409s when the contact has no WhatsApp number", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getById.mockReturnValue({ ...CONTACT, whatsapp: null });
+
+    const res = await request(app).get("/api/contacts/kat_osman/conversation");
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("no_whatsapp_number");
+  });
+
+  it("404s for an unknown contact", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getById.mockReturnValue(undefined);
+
+    const res = await request(app).get("/api/contacts/nobody/conversation");
+
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects an out-of-range window rather than hammering the daemon", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getById.mockReturnValue(CONTACT);
+    daemonReturns([]);
+
+    const res = await request(app).get("/api/contacts/kat_osman/conversation?days=9999");
+
+    expect(res.status).toBe(400);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("502s when the daemon is unreachable", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getById.mockReturnValue(CONTACT);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+
+    const res = await request(app).get("/api/contacts/kat_osman/conversation");
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe("daemon_unavailable");
+  });
+});
+
+// ── POST /api/contacts/sync-groups ────────────────────────────────────────────
+
+describe("POST /api/contacts/sync-groups", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const CONTACTS = [
+    { id: "kat_osman", name: "Kat Osman", whatsapp: "+44 7931 460 181", whatsapp_groups: null },
+    { id: "no_number", name: "No Number", whatsapp: null, whatsapp_groups: null },
+  ];
+
+  function daemonChats(chats: Array<{ chatJid: string }>) {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ chats }),
+    }));
+  }
+
+  it("reports the groups a contact belongs to", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getAll.mockReturnValue(CONTACTS);
+    daemonChats([{ chatJid: "123@g.us" }, { chatJid: "456@g.us" }]);
+
+    const res = await request(app).post("/api/contacts/sync-groups").send({ dry_run: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.contactsChecked).toBe(1); // the contact with no number is skipped
+    expect(res.body.results[0].groups).toEqual(["123@g.us", "456@g.us"]);
+    expect(res.body.results[0].changed).toBe(true);
+  });
+
+  it("ignores 1:1 chats, keeping only group JIDs", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getAll.mockReturnValue([CONTACTS[0]]);
+    daemonChats([{ chatJid: "123@g.us" }, { chatJid: "447931460181@s.whatsapp.net" }]);
+
+    const res = await request(app).post("/api/contacts/sync-groups").send({ dry_run: true });
+
+    expect(res.body.results[0].groups).toEqual(["123@g.us"]);
+  });
+
+  it("reports no change when the stored value already matches", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getAll.mockReturnValue([{ ...CONTACTS[0], whatsapp_groups: "123@g.us,456@g.us" }]);
+    daemonChats([{ chatJid: "456@g.us" }, { chatJid: "123@g.us" }]);
+
+    const res = await request(app).post("/api/contacts/sync-groups").send({ dry_run: true });
+
+    // Sorted before comparison, so daemon ordering must not cause a rewrite.
+    expect(res.body.contactsChanged).toBe(0);
+  });
+
+  it("writes nothing on a dry run", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getAll.mockReturnValue([CONTACTS[0]]);
+    daemonChats([{ chatJid: "123@g.us" }]);
+
+    await request(app).post("/api/contacts/sync-groups").send({ dry_run: true });
+
+    expect(mockContacts.loadFromDatabase).not.toHaveBeenCalled();
+  });
+
+  it("limits the sync to one contact when a name is given", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getAll.mockReturnValue([
+      ...CONTACTS,
+      { id: "annie_tan", name: "Annie Tan", whatsapp: "+447957370446", whatsapp_groups: null },
+    ]);
+    daemonChats([{ chatJid: "123@g.us" }]);
+
+    const res = await request(app)
+      .post("/api/contacts/sync-groups")
+      .send({ dry_run: true, contact_name: "Kat" });
+
+    expect(res.body.contactsChecked).toBe(1);
+    expect(res.body.results[0].contact).toBe("Kat Osman");
+  });
+
+  it("502s when the daemon cannot be reached", async () => {
+    const { app, mockContacts } = makeRouter();
+    mockContacts.getAll.mockReturnValue([CONTACTS[0]]);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+
+    const res = await request(app).post("/api/contacts/sync-groups").send({ dry_run: true });
+
+    expect(res.status).toBe(502);
   });
 });

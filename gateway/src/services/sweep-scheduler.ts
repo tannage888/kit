@@ -18,12 +18,12 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
 import { ContactRegistry } from "./contacts.js";
-import { CapturePipeline } from "./capture.js";
+import { CapturePipeline, contactParticipated } from "./capture.js";
 import { HistoryFetcher } from "./history-fetcher.js";
+import { toJid } from "../utils/wa-messages.js";
 import type {
   ContactSweepResult,
   SweepResult,
-  SweepState,
   TrackedContact,
 } from "../types.js";
 
@@ -34,6 +34,7 @@ export class SweepScheduler {
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
   private lastResult: SweepResult | null = null;
+  private groupNames = new Map<string, string>();
   private nextSweepAt: Date | null = null;
 
   constructor(
@@ -123,6 +124,8 @@ export class SweepScheduler {
         return result;
       }
 
+      await this.loadGroupNames();
+
       let allContacts = this.contacts.getAll();
 
       // Filter to a single contact if requested
@@ -188,6 +191,28 @@ export class SweepScheduler {
     this.nextSweepAt = new Date(Date.now() + startupDelayMs);
   }
 
+  /**
+   * Group display names, refreshed once per sweep run.
+   *
+   * The name is stored on each capture so the markdown section has a heading
+   * a human recognises rather than a raw JID.
+   */
+  private async loadGroupNames(): Promise<void> {
+    try {
+      const res = await fetch(`${config.EXTERNAL_GATEWAY_URL}/api/chats`);
+      if (!res.ok) return;
+      const body = (await res.json()) as {
+        chats?: Array<{ jid: string; displayName?: string | null; isGroup?: boolean }>;
+      };
+      this.groupNames.clear();
+      for (const chat of body.chats ?? []) {
+        if (chat.isGroup && chat.displayName) this.groupNames.set(chat.jid, chat.displayName);
+      }
+    } catch {
+      // Non-fatal — sections fall back to the JID as their heading.
+    }
+  }
+
   private async sweepContact(contact: TrackedContact): Promise<ContactSweepResult> {
     // Skip contacts that have opted out of capture
     if (contact.wa_capture === "off") {
@@ -216,7 +241,7 @@ export class SweepScheduler {
     // ── 1:1 sweep ────────────────────────────────────────────
 
     const sinceMs = await this.loadWatermark(contact.id);
-    const jid = contact.whatsapp.replace(/^\+/, "").replace(/\s+/g, "") + "@s.whatsapp.net";
+    const jid = toJid(contact.whatsapp);
 
     let threads;
     try {
@@ -293,6 +318,16 @@ export class SweepScheduler {
       let groupLastMessageTs = groupSinceMs;
       for (const thread of groupThreads) {
         thread.groupJid = groupJid;
+        thread.groupName = this.groupNames.get(groupJid);
+
+        // A group is swept per tracked member, so most threads contain none
+        // of this contact's own messages. Summarising those would file an
+        // entry about other people under their name.
+        if (!contactParticipated(thread)) {
+          groupLastMessageTs = Math.max(groupLastMessageTs, thread.lastActivityAt);
+          continue;
+        }
+
         try {
           await this.capture.processAndCommit(thread);
           groupThreadsProcessed++;

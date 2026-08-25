@@ -9,17 +9,11 @@
  * thoughts are typed (INTERACTION, NEXT_ACTION, OBSERVATION, etc.).
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { ContextBinder, toCanonicalName, ThoughtType } from "../context-binding/index.js";
 import { buildCheckinReport, formatCheckinReport, type CheckinContact, type CheckinFollowUp } from "../services/checkin.js";
 import { buildPrepCard, buildDraftContext, type PrepContact, type PrepInteraction, type PrepFollowUp, type PrepBrainContext } from "../services/prep.js";
 import { buildReconnectContext, type ReconnectContact, type ReconnectInteraction } from "../services/reconnect.js";
-
-const _toolsDir = path.dirname(fileURLToPath(import.meta.url));
-const PEOPLE_DIR = path.resolve(_toolsDir, "..", "..", "..", "People");
 
 // ── Supabase clients (initialised eagerly at module load) ─────────────────────
 
@@ -169,6 +163,8 @@ export interface ContactDetail {
   tier_label: string;
   days_overdue: number;
   recent_interactions: Interaction[];
+  /** Group-chat interactions, kept apart so they are never read as direct conversation. */
+  recent_group_interactions: Interaction[];
   open_follow_ups: FollowUp[];
   open_brain_context: Array<{
     content: string;
@@ -184,11 +180,12 @@ export async function getContact(nameOrId: string): Promise<ContactDetail | null
   const db = kitClient();
   const entity = toCanonicalName(contact.name);
 
-  const [interactionsRes, followUpsRes, brainContext] = await Promise.all([
+  const [interactionsRes, followUpsRes, brainContext, groupInteractionsRes] = await Promise.all([
     db
       .from("interaction_log")
       .select("*")
       .eq("contact_id", contact.id)
+      .is("group_jid", null)
       .order("date", { ascending: false })
       .limit(5),
     db
@@ -198,6 +195,13 @@ export async function getContact(nameOrId: string): Promise<ContactDetail | null
       .eq("completed", false)
       .order("created_at", { ascending: true }),
     _binder.getContext({ entity, limit: 5 }).catch(() => []),
+    db
+      .from("interaction_log")
+      .select("*")
+      .eq("contact_id", contact.id)
+      .not("group_jid", "is", null)
+      .order("date", { ascending: false })
+      .limit(5),
   ]);
 
   return {
@@ -205,6 +209,7 @@ export async function getContact(nameOrId: string): Promise<ContactDetail | null
     tier_label: tierLabel(contact.tier),
     days_overdue: daysOverdue(contact.next_action),
     recent_interactions: (interactionsRes.data ?? []) as Interaction[],
+    recent_group_interactions: (groupInteractionsRes.data ?? []) as Interaction[],
     open_follow_ups: (followUpsRes.data ?? []) as FollowUp[],
     open_brain_context: brainContext.map((t) => ({
       content: t.content,
@@ -348,6 +353,109 @@ export async function addFollowUp(contactNameOrId: string, text: string): Promis
 
 // ── Tool: sweep-now ───────────────────────────────────────────────────────────
 
+// ── Tool: get-conversation ────────────────────────────────────────────────────
+
+export interface ConversationMessage {
+  timestamp: number;
+  fromMe: boolean;
+  body: string;
+}
+
+export interface ConversationResponse {
+  contact: { id: string; name: string };
+  from: string;
+  to: string;
+  total: number;
+  returned: number;
+  truncated: boolean;
+  messages: ConversationMessage[];
+}
+
+/**
+ * Render a transcript as markdown, grouped by day.
+ *
+ * Exported for testing. Kept separate from the fetch so the formatting —
+ * the part with the edge cases — can be tested without a live gateway.
+ */
+export function formatTranscript(
+  data: ConversationResponse,
+  contactName: string,
+  days: number
+): string {
+  if (data.messages.length === 0) {
+    return `No messages with ${contactName} in the last ${days} day${days === 1 ? "" : "s"}.`;
+  }
+
+  const lines: string[] = [
+    `## Conversation with ${contactName}`,
+    `${data.returned} message${data.returned === 1 ? "" : "s"} over the last ${days} day${days === 1 ? "" : "s"}.` +
+      (data.truncated
+        ? ` Showing the most recent ${data.returned} of ${data.total} — ask for a shorter window or a higher limit to see more.`
+        : ""),
+  ];
+
+  let currentDay = "";
+  for (const m of data.messages) {
+    const when = new Date(m.timestamp);
+    const day = when.toISOString().slice(0, 10);
+    if (day !== currentDay) {
+      currentDay = day;
+      lines.push("", `### ${day}`);
+    }
+    const time = when.toISOString().slice(11, 16);
+    const who = m.fromMe ? "Me" : contactName;
+    // Media and other non-text messages arrive with an empty body.
+    const body = m.body?.trim() ? m.body.trim() : "[no text content — media, reaction or deleted]";
+    lines.push(`**${time} ${who}:** ${body.replace(/\n/g, "\n> ")}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Fetch the raw message transcript for a contact via the gateway.
+ *
+ * Read-only: unlike sweep-now this summarises nothing and writes nothing —
+ * it answers "what did they actually say?".
+ */
+export async function getConversation(input: {
+  contact_name: string;
+  days?: number;
+  limit?: number;
+}): Promise<string> {
+  const contact = await resolveContact(input.contact_name);
+  if (!contact) return `Contact "${input.contact_name}" not found.`;
+
+  const days = input.days ?? 14;
+  const limit = input.limit ?? 200;
+  const port = process.env.PORT ?? "3141";
+  const url =
+    `http://localhost:${port}/api/contacts/${encodeURIComponent(contact.id)}/conversation` +
+    `?days=${days}&limit=${limit}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (err: any) {
+    return `Could not reach the Kit gateway at ${url}. Is it running?\nError: ${err.message}`;
+  }
+
+  if (response.status === 404) return `${contact.name} is not in the live contact registry.`;
+  if (response.status === 409) return `${contact.name} has no WhatsApp number on record.`;
+  if (response.status === 403) {
+    return `Capture is switched off for ${contact.name}, so their messages are not readable. Set wa_capture to on_demand or auto to change that.`;
+  }
+  if (response.status === 502) {
+    return `The WhatsApp daemon did not respond. Check it is running on port 3142.`;
+  }
+  if (!response.ok) {
+    return `Could not read the conversation (HTTP ${response.status}): ${await response.text()}`;
+  }
+
+  const data = (await response.json()) as ConversationResponse;
+  return formatTranscript(data, contact.name, days);
+}
+
 export interface SweepNowResult {
   contactsSwept: number;
   contactsSkipped: number;
@@ -421,24 +529,6 @@ export async function sweepNow(contactName?: string): Promise<string> {
 
 // ── Tool: create-contact ──────────────────────────────────────────────────────
 
-const TIER_FOLDER: Record<number, string> = {
-  1: "1 - Inner Circle",
-  2: "2 - Active",
-  3: "3 - Business Contact",
-};
-
-const TIER_RELATIONSHIP: Record<number, string> = {
-  1: "1-Inner Circle",
-  2: "2-Active",
-  3: "3-Business Contact",
-};
-
-const TIER_TAG: Record<number, string> = {
-  1: "1-inner-circle",
-  2: "2-active",
-  3: "3-business-contact",
-};
-
 export interface CreateContactInput {
   name: string;
   tier: 1 | 2 | 3;
@@ -451,52 +541,6 @@ export interface CreateContactInput {
   wa_capture?: "auto" | "on_demand" | "off";
 }
 
-function buildMarkdown(input: CreateContactInput): string {
-  const rel = TIER_RELATIONSHIP[input.tier];
-  const tag = TIER_TAG[input.tier];
-  const bg = input.origin_story ?? "<!-- Add background here -->";
-  const notes = input.notes ?? "<!-- Add notes here -->";
-
-  // Optional frontmatter fields — only emit when provided so we don't pollute
-  // the file with empty keys.
-  const optional: string[] = [];
-  if (input.whatsapp) optional.push(`whatsapp: "${input.whatsapp}"`);
-  if (input.social_battery_cost) optional.push(`social_battery: ${input.social_battery_cost}`);
-  if (input.whatsapp_capture) optional.push(`whatsapp_capture: ${input.whatsapp_capture}`);
-  if (input.wa_capture) optional.push(`wa_capture: ${input.wa_capture}`);
-  const optionalBlock = optional.length ? optional.join("\n") + "\n" : "";
-
-  return `---
-name: ${input.name}
-relationship: ${rel}
-frequency: ${input.frequency}
-last_contact:
-next_action:
-${optionalBlock}tags: [people, ${tag}]
----
-
-# ${input.name}
-
-## At a Glance
-
-**Relationship:** ${rel}
-**Contact Frequency:** ${input.frequency}
-**Last Contact:**
-**Next Action:**
-
-## Background
-
-${bg}
-
-## Notes
-
-${notes}
-
-## Interaction Log
-
-<!-- Add notes after each contact below -->
-`;
-}
 
 export async function createContact(input: CreateContactInput): Promise<string> {
   // Delegate to the gateway REST API so the contact is immediately registered
@@ -544,7 +588,7 @@ export async function kitPrepCard(contactNameOrId: string): Promise<string> {
   const detail = await getContact(contactNameOrId);
   if (!detail) return `Contact "${contactNameOrId}" not found.`;
 
-  const { contact: c, recent_interactions, open_follow_ups, open_brain_context } = detail;
+  const { contact: c, recent_interactions, recent_group_interactions, open_follow_ups, open_brain_context } = detail;
 
   const prepContact: PrepContact = {
     id: c.id,
@@ -578,7 +622,14 @@ export async function kitPrepCard(contactNameOrId: string): Promise<string> {
     date: t.date,
   }));
 
-  return buildPrepCard(prepContact, interactions, followUps, brainCtx);
+  const groupInteractions: PrepInteraction[] = recent_group_interactions.map((i) => ({
+    date: i.date,
+    channel: i.channel,
+    notes: i.notes,
+    group_name: (i as any).group_name ?? null,
+  }));
+
+  return buildPrepCard(prepContact, interactions, followUps, brainCtx, groupInteractions);
 }
 
 // ── Tool: kit-draft-context ───────────────────────────────────────────────────
@@ -587,6 +638,8 @@ export async function kitDraftContext(contactNameOrId: string, intent?: string):
   const detail = await getContact(contactNameOrId);
   if (!detail) return `Contact "${contactNameOrId}" not found.`;
 
+  // Group activity is deliberately excluded — drafting should reference what
+  // you actually said to each other, not what they said to a group.
   const { contact: c, recent_interactions, open_follow_ups, open_brain_context } = detail;
 
   const prepContact: PrepContact = {
@@ -809,6 +862,251 @@ export async function setContactActive(
   return active
     ? `${contact.name} is now active again.`
     : `${contact.name} marked inactive — will be skipped by check-ins, sweeps, and follow-up prompts.`;
+}
+
+// ── Tool: update-contact ──────────────────────────────────────────────────────
+
+/**
+ * Canonical contact frequencies and their cadence in days.
+ * Inlined here (rather than imported from services/contacts.ts) so the MCP
+ * stdio process never pulls in config.ts, which exits the process if
+ * ANTHROPIC_API_KEY is absent — the MCP server doesn't need that key.
+ */
+const FREQUENCY_DAYS: Record<string, number> = {
+  Weekly: 7,
+  Monthly: 30,
+  Quarterly: 90,
+};
+
+/** Normalise a free-form frequency word to its canonical label, or null if unknown. */
+function normaliseFrequency(input: string): string | null {
+  switch (input.trim().toLowerCase()) {
+    case "weekly":    return "Weekly";
+    case "monthly":   return "Monthly";
+    case "quarterly": return "Quarterly";
+    default:          return null;
+  }
+}
+
+export interface UpdateContactInput {
+  contact_name: string;
+  frequency?: string;
+  tier?: number;
+  social_battery_cost?: string;
+  notes?: string;
+  origin_story?: string;
+  special_interests?: string;
+  whatsapp?: string;
+  active?: boolean;
+}
+
+/**
+ * Update a contact's editable settings: frequency/cadence, tier, social
+ * battery cost, notes, WhatsApp number, or active status. Changing frequency
+ * re-derives next_action from the existing last_contact under the new cadence.
+ * Persists to Supabase; the gateway's sync service propagates to the markdown.
+ */
+export async function updateContactFields(input: UpdateContactInput): Promise<string> {
+  const db = kitClient();
+
+  // Resolve without the active filter so archived contacts can be edited too.
+  const { data } = await db
+    .from("contacts")
+    .select("*")
+    .or(`id.eq.${input.contact_name},name.ilike.%${input.contact_name}%`)
+    .limit(1);
+
+  const contact = data?.[0] as Contact | undefined;
+  if (!contact) return `Contact "${input.contact_name}" not found.`;
+
+  const dbFields: Record<string, unknown> = {};
+  const changes: string[] = [];
+
+  if (input.frequency !== undefined) {
+    const freq = normaliseFrequency(input.frequency);
+    if (!freq) {
+      return `Invalid frequency "${input.frequency}". Use Weekly, Monthly, or Quarterly.`;
+    }
+    const freqDays = FREQUENCY_DAYS[freq] as number;
+    dbFields.frequency = freq;
+    dbFields.frequency_days = freqDays;
+    // Re-derive the next action from the last contact date under the new cadence.
+    if (contact.last_contact) {
+      dbFields.next_action = new Date(
+        new Date(contact.last_contact).getTime() + freqDays * 86_400_000
+      )
+        .toISOString()
+        .slice(0, 10);
+    }
+    changes.push(`frequency → ${freq}`);
+  }
+
+  if (input.tier !== undefined) {
+    if (![1, 2, 3].includes(input.tier)) {
+      return `Invalid tier ${input.tier}. Use 1 (Inner Circle), 2 (Active), or 3 (Business).`;
+    }
+    dbFields.tier = input.tier;
+    changes.push(`tier → ${input.tier} (${tierLabel(input.tier)})`);
+  }
+
+  if (input.social_battery_cost !== undefined) {
+    dbFields.social_battery_cost = input.social_battery_cost;
+    changes.push(`battery cost → ${input.social_battery_cost}`);
+  }
+
+  if (input.notes !== undefined) {
+    dbFields.notes = input.notes;
+    changes.push("notes updated");
+  }
+
+  if (input.origin_story !== undefined) {
+    dbFields.origin_story = input.origin_story;
+    changes.push("background updated");
+  }
+
+  if (input.special_interests !== undefined) {
+    dbFields.special_interests = input.special_interests;
+    changes.push("interests & hooks updated");
+  }
+
+  if (input.whatsapp !== undefined) {
+    dbFields.whatsapp = input.whatsapp || null;
+    changes.push(input.whatsapp ? `WhatsApp → ${input.whatsapp}` : "WhatsApp cleared");
+  }
+
+  if (input.active !== undefined) {
+    dbFields.active = input.active;
+    changes.push(input.active ? "reactivated" : "archived");
+  }
+
+  if (changes.length === 0) {
+    return `No changes specified for ${contact.name}.`;
+  }
+
+  const { error } = await db.from("contacts").update(dbFields).eq("id", contact.id);
+  if (error) throw new Error(`contacts update failed: ${error.message}`);
+
+  // Propagate to Open Brain so its view of the contact does not drift from Kit's.
+  const obResult = await _binder.captureThought({
+    content: [
+      `Contact record updated for ${contact.name}: ${changes.join(", ")}.`,
+      input.origin_story !== undefined ? `Background: ${input.origin_story}` : "",
+      input.special_interests !== undefined
+        ? `Interests & hooks: ${input.special_interests}`
+        : "",
+      input.notes !== undefined ? `Notes: ${input.notes}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    entity: toCanonicalName(contact.name),
+    thoughtType: ThoughtType.STATUS_CHANGE,
+    people: [contact.name],
+    source: "kit-mcp",
+  });
+
+  const suffix = obResult.success ? "" : " (Open Brain propagation failed)";
+  return `Updated ${contact.name}: ${changes.join(", ")}.${suffix}`;
+}
+
+// ── Tool: update-interaction ──────────────────────────────────────────────────
+
+export interface UpdateInteractionInput {
+  contact_name: string;
+  date: string;
+  notes: string;
+  /** Disambiguates when several interactions share a date (1:1 plus group entries). */
+  interaction_id?: string;
+  /** Why the note is being corrected — recorded in the Open Brain correction. */
+  reason?: string;
+}
+
+/**
+ * Correct the notes on an already-logged interaction.
+ *
+ * Open Brain thoughts are append-only, so the original interaction thought is
+ * left intact and a CORRECTION thought is appended alongside it. Without this,
+ * editing interaction_log directly leaves Kit and Open Brain disagreeing — and
+ * Open Brain is what feeds future prep and draft context.
+ */
+export async function updateInteractionNotes(
+  input: UpdateInteractionInput
+): Promise<string> {
+  const contact = await resolveContact(input.contact_name);
+  if (!contact) return `Contact "${input.contact_name}" not found.`;
+
+  const db = kitClient();
+
+  const { data: existing } = await db
+    .from("interaction_log")
+    .select("*")
+    .eq("contact_id", contact.id)
+    .eq("date", input.date);
+
+  let rows = (existing ?? []) as Interaction[];
+  if (rows.length === 0) {
+    return `No interaction logged for ${contact.name} on ${input.date}.`;
+  }
+
+  // An explicit id settles it outright.
+  if (input.interaction_id) {
+    rows = rows.filter((r) => r.id === input.interaction_id);
+    if (rows.length === 0) {
+      return `No interaction with id ${input.interaction_id} for ${contact.name} on ${input.date}.`;
+    }
+  } else if (rows.length > 1) {
+    // Group and 1:1 entries routinely share a date now, so a plain date match
+    // is ambiguous far more often than it used to be. A correction almost
+    // always means the direct conversation, so prefer it when it is the only
+    // non-group candidate rather than refusing outright.
+    const direct = rows.filter((r) => !(r as any).group_jid);
+    if (direct.length === 1) {
+      rows = direct;
+    } else {
+      const options = rows
+        .map((r) => {
+          const where = (r as any).group_name
+            ? `group "${(r as any).group_name}"`
+            : (r as any).group_jid
+              ? `group ${(r as any).group_jid}`
+              : "direct conversation";
+          return `  - ${r.id} (${where}): ${(r.notes ?? "").slice(0, 80)}…`;
+        })
+        .join("\n");
+      return (
+        `${rows.length} interactions logged for ${contact.name} on ${input.date} — ` +
+        `refusing to update ambiguously. Re-run with interaction_id set to one of:\n${options}`
+      );
+    }
+  }
+
+  const previous = rows[0].notes ?? "";
+
+  const { error } = await db
+    .from("interaction_log")
+    .update({ notes: input.notes })
+    .eq("id", rows[0].id);
+  if (error) throw new Error(`interaction_log update failed: ${error.message}`);
+
+  const obResult = await _binder.captureThought({
+    content: [
+      `Correction to the ${input.date} interaction with ${contact.name}.`,
+      input.reason ? `Reason: ${input.reason}` : "",
+      `Corrected record: ${input.notes}`,
+      `Superseded record: ${previous}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    entity: toCanonicalName(contact.name),
+    thoughtType: ThoughtType.STATUS_CHANGE,
+    extraTopics: ["correction"],
+    people: [contact.name],
+    source: "kit-mcp",
+  });
+
+  const suffix = obResult.success
+    ? " Correction appended to Open Brain."
+    : " WARNING: Open Brain propagation failed — the two stores now disagree.";
+  return `Updated the ${input.date} interaction for ${contact.name}.${suffix}`;
 }
 
 // ── Tool: kit-pending-captures ────────────────────────────────────────────────

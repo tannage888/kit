@@ -30,6 +30,8 @@ interface Interaction {
   date: string;
   notes: string;
   channel: string | null;
+  group_jid?: string | null;
+  group_name?: string | null;
 }
 
 interface FollowUp {
@@ -100,6 +102,10 @@ export default function ContactDetail() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sendText, setSendText] = useState('');
+  const [sendConfirm, setSendConfirm] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [tab, setTab] = useState<'profile' | 'history'>('profile');
   const [history, setHistory] = useState<{ interactions: Interaction[]; followUps: FollowUp[] } | null>(null);
 
@@ -185,6 +191,26 @@ export default function ContactDetail() {
     }
   }
 
+  async function sendMessage() {
+    if (!contact || !sendText.trim()) return;
+    setSending(true);
+    setSendResult(null);
+    try {
+      const res = await api.post<{ ok: boolean; messageId: string | null }>('/api/send', {
+        to: contact.whatsapp,
+        text: sendText.trim(),
+      });
+      setSendResult({ ok: true, msg: `Sent ✓ (id: ${res.messageId ?? 'n/a'})` });
+      setSendText('');
+      setSendConfirm(false);
+    } catch (e: unknown) {
+      setSendResult({ ok: false, msg: e instanceof Error ? e.message : String(e) });
+      setSendConfirm(false);
+    } finally {
+      setSending(false);
+    }
+  }
+
   const selectStyle = { ...inputStyle, width: 'auto' };
 
   const tabBtn = (t: 'profile' | 'history'): React.CSSProperties => ({
@@ -255,6 +281,12 @@ export default function ContactDetail() {
                     {interaction.channel && (
                       <span style={{ background: '#1e1e35', border: '1px solid #333', borderRadius: 4, padding: '0.1rem 0.4rem', fontSize: '0.72rem', color: '#7c6fcd' }}>
                         {interaction.channel}
+                      </span>
+                    )}
+                    {/* Group entries are labelled — unmarked they read as a direct conversation. */}
+                    {interaction.group_jid && (
+                      <span style={{ background: '#2a2416', border: '1px solid #4a3f22', borderRadius: 4, padding: '0.1rem 0.4rem', fontSize: '0.72rem', color: '#c9a227' }}>
+                        group: {interaction.group_name ?? 'unnamed'}
                       </span>
                     )}
                   </div>
@@ -392,6 +424,59 @@ export default function ContactDetail() {
           </span>
         )}
       </div>
+
+      {contact.whatsapp && (
+        <div style={{ marginTop: '2rem', borderTop: '1px solid #333', paddingTop: '1.5rem' }}>
+          <h3 style={{ color: '#a0a0b0', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Send Message</h3>
+          <textarea
+            style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+            value={sendText}
+            onChange={(e) => { setSendText(e.target.value); setSendConfirm(false); setSendResult(null); }}
+            placeholder="Type a WhatsApp message…"
+          />
+          {!sendConfirm ? (
+            <button
+              onClick={() => setSendConfirm(true)}
+              disabled={sending || !sendText.trim()}
+              style={{
+                marginTop: '0.5rem',
+                background: '#16a34a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                padding: '0.5rem 1.2rem',
+                cursor: sending || !sendText.trim() ? 'not-allowed' : 'pointer',
+                fontSize: '0.9rem',
+                opacity: sending || !sendText.trim() ? 0.5 : 1,
+              }}
+            >
+              Send via WhatsApp
+            </button>
+          ) : (
+            <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ color: '#e0e0e0', fontSize: '0.9rem' }}>Send to {contact.name} on WhatsApp?</span>
+              <button
+                onClick={sendMessage}
+                disabled={sending}
+                style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', cursor: sending ? 'not-allowed' : 'pointer', fontSize: '0.85rem', opacity: sending ? 0.6 : 1 }}
+              >
+                {sending ? 'Sending…' : 'Confirm'}
+              </button>
+              <button
+                onClick={() => setSendConfirm(false)}
+                style={{ background: 'transparent', color: '#a0a0b0', border: '1px solid #555', borderRadius: 6, padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {sendResult && (
+            <p style={{ marginTop: '0.5rem', fontSize: '0.88rem', color: sendResult.ok ? '#4ade80' : '#f87171' }}>
+              {sendResult.msg}
+            </p>
+          )}
+        </div>
+      )}
       </>)}
     </div>
   );

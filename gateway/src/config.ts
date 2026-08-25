@@ -6,9 +6,9 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_KEY: z.string().min(1),
 
-  // Supabase — Open Brain (dedicated instance)
-  OPEN_BRAIN_URL: z.string().url(),
-  OPEN_BRAIN_SERVICE_KEY: z.string().min(1),
+  // Supabase — Open Brain (optional; disabled when absent)
+  OPEN_BRAIN_URL: z.string().url().optional(),
+  OPEN_BRAIN_SERVICE_KEY: z.string().min(1).optional(),
 
   // Anthropic
   ANTHROPIC_API_KEY: z.string().startsWith("sk-ant-"),
