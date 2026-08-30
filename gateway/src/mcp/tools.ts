@@ -456,6 +456,85 @@ export async function getConversation(input: {
   return formatTranscript(data, contact.name, days);
 }
 
+// ── Tool: send-message ────────────────────────────────────────────────────────
+
+export interface SendMessageResult {
+  ok: boolean;
+  messageId: string | null;
+}
+
+/**
+ * Send a WhatsApp message to a Kit contact.
+ *
+ * Deliberately contact-only: the number is read from the contact record and
+ * never taken from the caller, so a mistyped name fails closed with "not
+ * found" rather than delivering a message to a stranger.
+ *
+ * Sending is not capture. A contact with `wa_capture: off` has opted out of
+ * having *their* messages stored, which says nothing about whether you may
+ * write to them, so that flag is deliberately not checked here.
+ */
+export async function sendMessage(input: {
+  contact_name: string;
+  text: string;
+  log?: boolean;
+}): Promise<string> {
+  const text = input.text?.trim() ?? "";
+  if (!text) return "Nothing to send — the message text is empty.";
+
+  const contact = await resolveContact(input.contact_name);
+  if (!contact) {
+    return `Contact "${input.contact_name}" not found. Add them with create-contact first.`;
+  }
+  if (!contact.whatsapp) {
+    return `${contact.name} has no WhatsApp number on record. Add one with update-contact before sending.`;
+  }
+
+  const port = process.env.PORT ?? "3141";
+  const url = `http://localhost:${port}/api/send`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // The stored number is human-formatted ("+65 9182 8173"); the gateway
+      // wants strict E.164.
+      body: JSON.stringify({ to: contact.whatsapp.replace(/\s+/g, ""), text }),
+    });
+  } catch (err: any) {
+    return `Could not reach the Kit gateway at ${url}. Is it running?\nError: ${err.message}`;
+  }
+
+  if (response.status === 503) {
+    return `The WhatsApp daemon is not connected, so nothing was sent to ${contact.name}. Check it is running on port 3142 and still paired.`;
+  }
+  if (!response.ok) {
+    return `Message to ${contact.name} was not sent (HTTP ${response.status}): ${await response.text()}`;
+  }
+
+  const data = (await response.json()) as SendMessageResult;
+
+  // Logging is best-effort by design: the message has already left, so a
+  // bookkeeping failure must not read back to the user as a send failure.
+  let logNote = "";
+  if (input.log !== false) {
+    try {
+      await logInteraction({
+        contact_name: contact.id,
+        notes: `Sent via WhatsApp: ${text}`,
+        channel: "whatsapp",
+      });
+      logNote = "\nLogged as an interaction — last contact and next action updated.";
+    } catch (err: any) {
+      logNote = `\nSent, but logging it failed: ${err.message}`;
+    }
+  }
+
+  const id = data?.messageId ? ` (id ${data.messageId})` : "";
+  return `Sent to ${contact.name}${id}.${logNote}\n\n> ${text.replace(/\n/g, "\n> ")}`;
+}
+
 export interface SweepNowResult {
   contactsSwept: number;
   contactsSkipped: number;
