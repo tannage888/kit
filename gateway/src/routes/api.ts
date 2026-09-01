@@ -323,7 +323,9 @@ export function createApiRouter(
     whatsapp: z.string().refine(isValidE164, "Must be E.164 format"),
     tier: z.number().int().min(1).max(3),
     wa_capture: z.enum(["auto", "on_demand", "off"]).default("on_demand"),
-    frequency: z.enum(["Weekly", "Monthly", "Quarterly"]),
+    frequency: z.enum([
+      "Weekly", "Fortnightly", "Monthly", "Bi-monthly", "Quarterly", "Twice Yearly", "Annual",
+    ]),
     last_contact: z.string(),
   });
 

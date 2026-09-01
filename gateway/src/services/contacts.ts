@@ -10,6 +10,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
 import type { CaptureMode, TrackedContact } from "../types.js";
+import { frequencyToDays as parseFrequencyToDays } from "../utils/markdown.js";
 
 export class ContactRegistry {
   /** JID → TrackedContact for O(1) lookup on WhatsApp message events */
@@ -254,13 +255,16 @@ export class ContactRegistry {
 
 // ── Exported frequency helpers (also used by SweepScheduler) ──
 
+/**
+ * Cadence in days for a frequency label.
+ *
+ * Delegates to the markdown parser's implementation so there is exactly one
+ * definition. They used to disagree: this one knew only Weekly/Monthly/
+ * Quarterly and silently fell back to 30, so updating a Fortnightly contact
+ * through the gateway reset them from 14 to 30 days with no error.
+ */
 export function frequencyToDays(frequency: string): number {
-  switch (frequency) {
-    case "Weekly":    return 7;
-    case "Monthly":   return 30;
-    case "Quarterly": return 90;
-    default:          return 30;
-  }
+  return parseFrequencyToDays(frequency);
 }
 
 export function calcNextAction(lastContact: string, frequencyDays: number): string {

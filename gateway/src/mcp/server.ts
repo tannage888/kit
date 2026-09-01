@@ -177,7 +177,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           frequency: {
             type: "string",
-            enum: ["Weekly", "Fortnightly", "Monthly", "Quarterly", "Twice Yearly", "Annual"],
+            enum: ["Weekly", "Fortnightly", "Monthly", "Bi-monthly", "Quarterly", "Twice Yearly", "Annual"],
             description: "How often to stay in touch",
           },
           origin_story: {
@@ -455,7 +455,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           frequency: {
             type: "string",
-            enum: ["Weekly", "Monthly", "Quarterly"],
+            enum: ["Weekly", "Fortnightly", "Monthly", "Bi-monthly", "Quarterly", "Twice Yearly", "Annual"],
             description: "How often to stay in touch. Recomputes the next-action date.",
           },
           tier: {

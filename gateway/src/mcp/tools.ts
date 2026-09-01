@@ -953,19 +953,31 @@ export async function setContactActive(
  */
 const FREQUENCY_DAYS: Record<string, number> = {
   Weekly: 7,
+  Fortnightly: 14,
   Monthly: 30,
+  "Bi-monthly": 60,
   Quarterly: 90,
+  "Twice Yearly": 180,
+  Annual: 365,
 };
 
 /** Normalise a free-form frequency word to its canonical label, or null if unknown. */
 function normaliseFrequency(input: string): string | null {
   switch (input.trim().toLowerCase()) {
-    case "weekly":    return "Weekly";
-    case "monthly":   return "Monthly";
-    case "quarterly": return "Quarterly";
-    default:          return null;
+    case "weekly":                                  return "Weekly";
+    case "fortnightly": case "bi-weekly":           return "Fortnightly";
+    case "monthly":                                 return "Monthly";
+    case "bi-monthly": case "every two months":     return "Bi-monthly";
+    case "quarterly":                               return "Quarterly";
+    case "twice yearly": case "bi-annual":
+    case "bi-annually":                             return "Twice Yearly";
+    case "annual": case "annually": case "yearly":  return "Annual";
+    default:                                        return null;
   }
 }
+
+/** Human-readable list for error messages — derived, so it cannot drift. */
+const FREQUENCY_LABELS = Object.keys(FREQUENCY_DAYS).join(", ");
 
 export interface UpdateContactInput {
   contact_name: string;
@@ -1004,7 +1016,7 @@ export async function updateContactFields(input: UpdateContactInput): Promise<st
   if (input.frequency !== undefined) {
     const freq = normaliseFrequency(input.frequency);
     if (!freq) {
-      return `Invalid frequency "${input.frequency}". Use Weekly, Monthly, or Quarterly.`;
+      return `Invalid frequency "${input.frequency}". Use one of: ${FREQUENCY_LABELS}.`;
     }
     const freqDays = FREQUENCY_DAYS[freq] as number;
     dbFields.frequency = freq;
