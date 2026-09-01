@@ -1,7 +1,14 @@
 // ── Contact types (mirror of Kit mobile app schema) ────────
 
 export type RelationshipTier = "1-Inner Circle" | "2-Active" | "3-Business Contact";
-export type ContactFrequency = "Weekly" | "Monthly" | "Quarterly";
+export type ContactFrequency =
+  | "Weekly"
+  | "Fortnightly"
+  | "Monthly"
+  | "Bi-monthly"
+  | "Quarterly"
+  | "Twice Yearly"
+  | "Annual";
 export type BatteryCost = "Low" | "Medium" | "High";
 export type CaptureMode = "auto" | "on_demand" | "off";
 export type Channel = "whatsapp" | "linkedin" | "instagram" | "call" | "in-person" | "email" | "other";

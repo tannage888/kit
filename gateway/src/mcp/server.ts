@@ -41,6 +41,7 @@ import {
   updateContactFields,
   updateInteractionNotes,
   getConversation,
+  sendMessage,
 } from "./tools.js";
 
 // ── Server definition ─────────────────────────────────────────────────────────
@@ -176,7 +177,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           frequency: {
             type: "string",
-            enum: ["Weekly", "Fortnightly", "Monthly", "Quarterly", "Twice Yearly", "Annual"],
+            enum: ["Weekly", "Fortnightly", "Monthly", "Bi-monthly", "Quarterly", "Twice Yearly", "Annual"],
             description: "How often to stay in touch",
           },
           origin_story: {
@@ -213,6 +214,35 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ["name", "tier", "frequency"],
+      },
+    },
+    {
+      name: "send-message",
+      description:
+        "Send a WhatsApp message to a Kit contact. This delivers a real message to a real " +
+        "person immediately and cannot be undone — always show the user the exact wording and " +
+        "get their agreement before calling it. Recipients are limited to existing Kit " +
+        "contacts; the number comes from their record, so there is no way to send to an " +
+        "arbitrary number. The message is logged as an interaction by default.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_name: {
+            type: "string",
+            description: "Contact name or ID (partial name match is fine)",
+          },
+          text: {
+            type: "string",
+            description: "The exact message text to send, as the user approved it",
+          },
+          log: {
+            type: "boolean",
+            description:
+              "Whether to log this as an interaction and update last contact / next action. " +
+              "Defaults to true. Set false for a throwaway message not worth recording.",
+          },
+        },
+        required: ["contact_name", "text"],
       },
     },
     {
@@ -425,7 +455,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           frequency: {
             type: "string",
-            enum: ["Weekly", "Monthly", "Quarterly"],
+            enum: ["Weekly", "Fortnightly", "Monthly", "Bi-monthly", "Quarterly", "Twice Yearly", "Annual"],
             description: "How often to stay in touch. Recomputes the next-action date.",
           },
           tier: {
@@ -640,6 +670,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           whatsapp: args?.whatsapp ? String(args.whatsapp) : undefined,
           whatsapp_capture: args?.whatsapp_capture as "enabled" | "disabled" | undefined,
           wa_capture: args?.wa_capture as "auto" | "on_demand" | "off" | undefined,
+        });
+        return text(msg);
+      }
+
+      case "send-message": {
+        const msg = await sendMessage({
+          contact_name: String(args?.contact_name ?? ""),
+          text: String(args?.text ?? ""),
+          log: args?.log as boolean | undefined,
         });
         return text(msg);
       }

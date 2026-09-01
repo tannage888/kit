@@ -98,7 +98,7 @@ vi.mock("../context-binding/index.js", async (importOriginal) => {
   };
 });
 
-const { updateContactFields, updateInteractionNotes, formatTranscript, getContact, kitPrepCard, kitDraftContext } = await import("./tools.js");
+const { updateContactFields, updateInteractionNotes, formatTranscript, getContact, kitPrepCard, kitDraftContext, sendMessage } = await import("./tools.js");
 const { ThoughtType } = await import("../context-binding/index.js");
 
 const CONTACT = {
@@ -425,6 +425,111 @@ describe("updateInteractionNotes with several entries on one date", () => {
     });
 
     expect(msg).toContain("No interaction with id does-not-exist");
+    expect(state.updates).toHaveLength(0);
+  });
+});
+
+// ── send-message ──────────────────────────────────────────────────────────────
+
+/**
+ * Sending is the one tool here that reaches a real person and cannot be taken
+ * back, so these tests pin the guards rather than the happy path: who it will
+ * refuse to send to, and what it records afterwards.
+ */
+describe("sendMessage", () => {
+  let fetchMock: any;
+
+  beforeEach(() => {
+    state.contacts = [{ ...CONTACT, whatsapp: "+65 9182 8173" }];
+    fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, messageId: "3EB0ABC" }),
+      text: async () => "",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  it("sends to the number on the contact's record, stripped to strict E.164", async () => {
+    const msg = await sendMessage({ contact_name: "Becks", text: "Dinner Saturday?" });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    // The gateway's send schema rejects anything that is not bare E.164, so the
+    // spaces the contact file stores have to come out here.
+    expect(body.to).toBe("+6591828173");
+    expect(body.text).toBe("Dinner Saturday?");
+    expect(msg).toContain("Sent to Becks Tan (Potato)");
+  });
+
+  it("refuses an unknown contact without sending anything", async () => {
+    const msg = await sendMessage({ contact_name: "Nobody At All", text: "Hello" });
+
+    expect(msg).toContain("not found");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a contact with no number rather than guessing one", async () => {
+    state.contacts = [{ ...CONTACT, whatsapp: null }];
+
+    const msg = await sendMessage({ contact_name: "Becks", text: "Hello" });
+
+    expect(msg).toContain("no WhatsApp number on record");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("will not send an empty message", async () => {
+    const msg = await sendMessage({ contact_name: "Becks", text: "   " });
+
+    expect(msg).toContain("empty");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("logs the send as an interaction and moves the contact out of the queue", async () => {
+    await sendMessage({ contact_name: "Becks", text: "Dinner Saturday?" });
+
+    const update = state.updates.find((u) => u.table === "contacts");
+    expect(update?.fields.last_contact).toBeTruthy();
+    expect(update?.fields.next_action).toBeTruthy();
+
+    const thought = captured.find((c) => c.thoughtType === ThoughtType.INTERACTION);
+    expect(thought?.content).toContain("Dinner Saturday?");
+  });
+
+  it("records nothing when logging is switched off", async () => {
+    await sendMessage({ contact_name: "Becks", text: "Dinner Saturday?", log: false });
+
+    expect(state.updates).toHaveLength(0);
+    expect(captured).toHaveLength(0);
+  });
+
+  it("reports a disconnected daemon as not sent, and logs nothing", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "whatsapp_not_initialised" }),
+      text: async () => "",
+    });
+
+    const msg = await sendMessage({ contact_name: "Becks", text: "Dinner Saturday?" });
+
+    expect(msg).toContain("not connected");
+    expect(msg).toContain("nothing was sent");
+    // Nothing left, so nothing to record — a logged interaction here would be a lie.
+    expect(state.updates).toHaveLength(0);
+    expect(captured).toHaveLength(0);
+  });
+
+  it("does not log when the gateway rejects the send", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: "invalid_body" }),
+      text: async () => "invalid_body",
+    });
+
+    const msg = await sendMessage({ contact_name: "Becks", text: "Dinner Saturday?" });
+
+    expect(msg).toContain("was not sent");
     expect(state.updates).toHaveLength(0);
   });
 });
