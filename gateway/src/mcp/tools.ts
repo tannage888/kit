@@ -239,6 +239,12 @@ export interface LogInteractionInput {
   date?: string; // defaults to today
   channel?: string; // defaults to "other"
   follow_ups?: string[]; // new follow-up items to create
+  /**
+   * The WhatsApp message this entry records, when it is one message Kit sent
+   * itself. The sweep reads sent messages back off WhatsApp, so without this
+   * it summarises them again and the send is logged twice.
+   */
+  wa_message_id?: string;
 }
 
 export async function logInteraction(input: LogInteractionInput): Promise<string> {
@@ -250,12 +256,16 @@ export async function logInteraction(input: LogInteractionInput): Promise<string
   const channel = input.channel ?? "other";
 
   // Write to interaction_log
+  // Only send wa_message_id when there is one, so a database without the
+  // migration applied still accepts every other write rather than failing
+  // on an unknown column.
   const { error: logError } = await db.from("interaction_log").insert({
     id: crypto.randomUUID(),
     contact_id: contact.id,
     date,
     channel,
     notes: input.notes,
+    ...(input.wa_message_id ? { wa_message_id: input.wa_message_id } : {}),
   });
   if (logError) throw new Error(`interaction_log insert failed: ${logError.message}`);
 
@@ -524,6 +534,9 @@ export async function sendMessage(input: {
         contact_name: contact.id,
         notes: `Sent via WhatsApp: ${text}`,
         channel: "whatsapp",
+        // Lets the sweep recognise its own send when it reads the message
+        // back, instead of summarising it as a second interaction.
+        wa_message_id: data?.messageId ?? undefined,
       });
       logNote = "\nLogged as an interaction — last contact and next action updated.";
     } catch (err: any) {

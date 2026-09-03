@@ -103,8 +103,10 @@ function makeScheduler(contacts: TrackedContact[], threads: ConversationThread[]
     }),
   };
 
+  // A committed capture resolves to its CaptureResult; null means the thread
+  // was already logged and was skipped, which is only counted as such.
   const mockCapture = {
-    processAndCommit: vi.fn().mockResolvedValue(undefined),
+    processAndCommit: vi.fn().mockResolvedValue({ contactName: "Test Contact" }),
   };
 
   const scheduler = new SweepScheduler(
