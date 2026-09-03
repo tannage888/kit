@@ -159,16 +159,79 @@ export class CapturePipeline {
    * Process and immediately commit — summarise and write without queuing.
    * Used by the sweep scheduler where the user has opted into automation.
    */
-  async processAndCommit(thread: ConversationThread): Promise<CaptureResult> {
+  async processAndCommit(thread: ConversationThread): Promise<CaptureResult | null> {
+    const fresh = await this.withoutAlreadyLogged(thread);
+    if (!fresh) {
+      console.log(
+        `  ⏩ ${thread.contact.name} — every message in this thread is already logged.`
+      );
+      return null;
+    }
+
     console.log(
-      `🧠 Summarising ${thread.messages.length} messages with ${thread.contact.name}...`
+      `🧠 Summarising ${fresh.messages.length} messages with ${fresh.contact.name}...`
     );
 
-    const result = await this.summarise(thread);
-    await this.commit(thread.contact.id, result);
+    const result = await this.summarise(fresh);
+    await this.commit(fresh.contact.id, result);
 
     console.log(`✅ Sweep capture committed for ${result.contactName}.`);
     return result;
+  }
+
+  /**
+   * The thread with any messages Kit has already logged itself removed, or
+   * null if that leaves nothing to summarise.
+   *
+   * send-message writes its own interaction the moment a message leaves,
+   * recording the WhatsApp message id. The sweep then reads that same message
+   * back and, knowing nothing about it, summarises it as a second interaction —
+   * so every message sent through Kit was landing in the log twice.
+   *
+   * Already-logged messages are dropped rather than kept as context for the
+   * ones around them: the send row holds the message verbatim, so nothing is
+   * lost from the record as a whole, and dropping them is what guarantees a
+   * message is never counted twice.
+   *
+   * Fails open. A capture that cannot check is better than a capture that
+   * does not happen, and this runs against databases where the wa_message_id
+   * migration has not been applied yet.
+   */
+  private async withoutAlreadyLogged(
+    thread: ConversationThread
+  ): Promise<ConversationThread | null> {
+    const ids = thread.messages.map((m) => m.messageId).filter(Boolean);
+    if (ids.length === 0) return thread;
+
+    const { data, error } = await this.kit
+      .schema("kit")
+      .from("interaction_log")
+      .select("wa_message_id")
+      .eq("contact_id", thread.contact.id)
+      .in("wa_message_id", ids);
+
+    if (error) {
+      console.warn(
+        `  ⚠️  Could not check for already-logged messages (${thread.contact.name}): ${error.message}`
+      );
+      return thread;
+    }
+
+    const logged = new Set((data ?? []).map((r: { wa_message_id: string }) => r.wa_message_id));
+    if (logged.size === 0) return thread;
+
+    const messages = thread.messages.filter((m) => !logged.has(m.messageId));
+    if (messages.length === 0) return null;
+
+    // startedAt drives the interaction's date, so it has to follow the
+    // messages that actually survived. The caller keeps the original thread,
+    // and with it the sweep watermark covering everything that was read.
+    return {
+      ...thread,
+      messages,
+      startedAt: messages[0].timestamp,
+      lastActivityAt: messages[messages.length - 1].timestamp,
+    };
   }
 
   /**

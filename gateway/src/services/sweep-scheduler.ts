@@ -314,8 +314,11 @@ export class SweepScheduler {
 
       for (const thread of threads) {
         try {
-          await this.capture.processAndCommit(thread);
-          threadsProcessed++;
+          // A thread Kit has already logged in full returns null. The
+          // watermark still moves past it — it was read, and leaving it
+          // behind means re-reading it on every sweep from here on.
+          const captured = await this.capture.processAndCommit(thread);
+          if (captured) threadsProcessed++;
           lastMessageTs = Math.max(lastMessageTs, thread.lastActivityAt);
         } catch (err) {
           console.error(
@@ -370,8 +373,8 @@ export class SweepScheduler {
         }
 
         try {
-          await this.capture.processAndCommit(thread);
-          groupThreadsProcessed++;
+          const captured = await this.capture.processAndCommit(thread);
+          if (captured) groupThreadsProcessed++;
           groupLastMessageTs = Math.max(groupLastMessageTs, thread.lastActivityAt);
         } catch (err) {
           console.error(
