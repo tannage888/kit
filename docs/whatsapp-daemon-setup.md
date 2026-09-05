@@ -39,6 +39,58 @@ npx claude_whatsapp_integration --gateway http://localhost:3141
 
 On first run the daemon will display a QR code — scan it with WhatsApp on your phone.
 
+## Session credentials and re-pairing
+
+The daemon keeps its WhatsApp session in `auth_state/kit/` — `creds.json` plus several hundred Signal-protocol pre-keys and sender keys. **Treat that folder as a credential.** It cannot be rotated: anyone holding a copy can act as the linked account until the device is unlinked from the phone.
+
+The live session is the only copy that should exist anywhere:
+
+```
+C:\dev\claude_whatsapp_integration\auth_state\kit\
+```
+
+### After a re-pair
+
+Re-pairing writes a fresh session but **does not remove the old one**. Past re-pairs left complete, usable sessions behind in `auth_state\kit.bak-<date>\`, `auth_backups\kit-<timestamp>\` and `C:\dev\_backups\kit-wa-auth-<date>\`.
+
+1. **Unlink the old device** — WhatsApp › Settings › Linked devices. Identify it by *last-active date*, not by name: Baileys registers as a browser, so every Kit device looks alike. If only one device is listed, that is the live one — leave it. WhatsApp also auto-unlinks devices idle beyond ~14 days, so an old one may already have dropped off.
+2. **Delete the displaced folder** rather than renaming it to `.bak`.
+3. **Audit** with the command below.
+
+### Backups exclude it by name
+
+`C:\dev\backup.ps1` mirrors all of `C:\dev` into OneDrive using robocopy `/MIR`. It denies by *directory and file name*, so a session sitting in a folder whose name is not on the list gets uploaded. Excluding `auth_state` alone is not enough — the folders a re-pair displaces it into need listing too.
+
+Currently excluded: directories `auth_state`, `auth_backups`, `_backups`; file `creds.json`.
+
+Edit `C:\dev\backup.ps1`. The copy at `%USERPROFILE%\OneDrive\DevBackup\backup.ps1` is a mirror that robocopy overwrites on every run, so edits there are silently lost.
+
+Two things that catch people out:
+
+- Excluded directories are **skipped, not purged**. `/MIR` will never clean up a copy already sitting in OneDrive — those have to go by hand.
+- Deleting inside OneDrive only moves the files to the online recycle bin, where they stay restorable for 30 days. Empty it at onedrive.live.com to finish the job.
+
+### Auditing for stray sessions
+
+```bash
+# Should return exactly one path: the live session.
+find /c/dev "$USERPROFILE/OneDrive" -maxdepth 8 -name creds.json -not -path '*/node_modules/*'
+```
+
+To verify the backup exclusions actually hold, run robocopy in list-only mode and grep the copy list — reading the script is not proof:
+
+```bash
+MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 \
+  robocopy "C:\dev\claude_whatsapp_integration" "<scratch>" /MIR /L /NP /NDL \
+  /XD node_modules .git auth_state auth_backups _backups /XF creds.json
+```
+
+Without those two environment variables Git Bash rewrites `/MIR` and friends into paths; robocopy then exits 16 with a usage dump that can be mistaken for a clean result.
+
+> **2026-09-05 audit.** Six full sessions were found outside the live folder — roughly 5,000 files and 77 MB across `C:\dev` and OneDrive, four of them mirrored to the cloud by the backup script. All removed, the stale device unlinked, and the exclusions above added. Nothing had reached GitHub: `auth_state/` is gitignored in the daemon repo and appears in no commit.
+>
+> Still open: `data\kit\wa_store.json` (~10 MB of message history, no credentials) is mirrored to OneDrive on every backup run. Not an impersonation risk, so it was left as a separate decision.
+
 ## Message routing behaviour
 
 A message is captured only when **all** of these hold:
