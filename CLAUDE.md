@@ -18,14 +18,18 @@ Kit gateway  ── REST ──►  claude_whatsapp_integration (dedicated insta
   │                              │
   │                              └── Baileys ──► WhatsApp
   ├─► Supabase (kit schema)       (Kit never touches Baileys directly)
-  ├─► Open Brain (via ContextBinder)
+  ├─► Open Brain (public.thoughts, via ContextBinder)
   └─► People/*.md (file watcher)
+
+  Both Supabase arrows currently resolve to the SAME project
+  (popxesemindihcbedegy). The schema is what separates them.
 ```
 
 - **Kit gateway** (`gateway/`) — Express server on `:3141`. Serves the React web UI from `web/dist/` at `/`, and the REST API at `/api`. REST client of the external WhatsApp daemon. Owns: contact registry, capture pipeline, markdown↔Supabase sync, sweep scheduler.
 - **Dedicated WhatsApp daemon** — a separate `claude_whatsapp_integration` instance at `C:\dev\claude_whatsapp_integration` (port `:3142`, `auth_state/kit/`). Runs alongside the gateway under pm2.
 - **Supabase** — `kit` schema holds `contacts`, `follow_ups`, `interaction_log`, `kit_meta`, `wa_sweep_state`, `energy_state`.
-- **Open Brain** — a separate Supabase instance. Kit writes to the `thoughts` table via `ContextBinder.capture()` only. Never `.from('thoughts')` directly.
+- **Open Brain** — logically separate, but **currently the same Supabase project as Kit**: `gateway/.env` sets both `SUPABASE_URL` and `OPEN_BRAIN_URL` to `popxesemindihcbedegy`. Kit lives in the `kit` schema, Open Brain in `public.thoughts` / `public.vault_manifest`. Kit writes to `thoughts` via `ContextBinder.capture()` only. Never `.from('thoughts')` directly. See [docs/kit_specification.md](docs/kit_specification.md) §5.8 — the two are meant to be separable, so keep the URLs as distinct config even while they point at one project.
+  - **Destructive work must be scoped to a schema or an explicit table list, never to the project.** That one project also holds `health_monitor`, `triage` and plant care (`public.pc_*`). Rotating its service-role key breaks Kit until `gateway/.env` is updated.
 - **People/*.md** — source of truth for contact records. Gitignored (personal data). See `People.template/` for the schema.
 
 ## Web UI (`web/`)
@@ -68,7 +72,7 @@ supabase.schema('kit').from('contacts')
 
 ## Markdown ↔ Supabase sync
 
-`gateway/src/services/sync.ts` keeps both sides live via chokidar (MD changes) + Supabase Realtime (DB changes). 3-second loop-prevention guard per contact on each direction. `SyncService` connects to `SUPABASE_URL`, never `OPEN_BRAIN_URL`.
+`gateway/src/services/sync.ts` keeps both sides live via chokidar (MD changes) + Supabase Realtime (DB changes). 3-second loop-prevention guard per contact on each direction. `SyncService` connects to `SUPABASE_URL`, never `OPEN_BRAIN_URL` — a code convention that survives the two currently resolving to the same project, and the thing that keeps them separable later.
 
 ## WhatsApp capture
 
