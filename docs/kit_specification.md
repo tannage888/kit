@@ -71,6 +71,7 @@ The markdown files need to store this information
 | sensitive_topics | text | Recommended | Topics to avoid — prevents social missteps |
 | preferred_channel | enum | Recommended | WhatsApp, Email, LinkedIn, Phone, In-Person |
 | whatsapp_number | string | If channel=WhatsApp | E.164 format |
+| email | string | Recommended | Their current best address. One per contact — a corporate address that expires is overwritten, not appended to. Never stored in `notes`. |
 | whatsapp_capture | enum | Yes | `enabled` or `disabled` — controls whether Kit's WhatsApp listener reads messages for this contact. Default `disabled` (opt-in per contact). |
 | birthday | date | Optional | Used for Occasion Awareness |
 | notes | text | Optional | Free-form additional context |

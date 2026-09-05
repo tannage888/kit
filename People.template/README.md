@@ -26,3 +26,7 @@ Mandatory on creation:
 - `whatsapp_capture` (defaults to `disabled`)
 
 The others are recommended — they make Kit's features significantly more useful.
+
+`email` is one of them, and it is a real column on `kit.contacts` — put an address
+there rather than in `notes`, or nothing else in Kit can find it. One address per
+contact: their current best one. When a corporate address expires, overwrite it.

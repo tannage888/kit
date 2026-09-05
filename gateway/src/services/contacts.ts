@@ -10,7 +10,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
 import type { CaptureMode, TrackedContact } from "../types.js";
-import { frequencyToDays as parseFrequencyToDays } from "../utils/markdown.js";
+import { frequencyToDays as parseFrequencyToDays, normaliseEmail } from "../utils/markdown.js";
 
 export class ContactRegistry {
   /** JID → TrackedContact for O(1) lookup on WhatsApp message events */
@@ -35,7 +35,7 @@ export class ContactRegistry {
     const { data, error } = await this.supabase
       .schema("kit")
       .from("contacts")
-      .select("id, name, whatsapp, tier, wa_capture, frequency, frequency_days, last_contact, whatsapp_capture, linkedin_username, linkedin_capture, instagram_username, instagram_capture, whatsapp_groups, url, active");
+      .select("id, name, whatsapp, tier, wa_capture, frequency, frequency_days, last_contact, whatsapp_capture, linkedin_username, linkedin_capture, instagram_username, instagram_capture, whatsapp_groups, email, url, active");
 
     if (error) {
       console.error("❌ Failed to load contacts from Supabase:", error.message);
@@ -63,6 +63,7 @@ export class ContactRegistry {
         instagram_username: row.instagram_username ?? null,
         instagram_capture: row.instagram_capture === "enabled" ? "enabled" : "disabled",
         whatsapp_groups: row.whatsapp_groups ?? null,
+        email: row.email ?? null,
         url: row.url ?? null,
         active: row.active ?? true,
       };
@@ -187,6 +188,7 @@ export class ContactRegistry {
       | "whatsapp" | "wa_capture" | "whatsapp_capture"
       | "linkedin_username" | "linkedin_capture"
       | "instagram_username" | "instagram_capture"
+      | "email"
     >>
   ): Promise<boolean> {
     const contact = this.byId.get(contactId);
@@ -211,6 +213,7 @@ export class ContactRegistry {
     if (fields.linkedin_capture !== undefined) dbFields.linkedin_capture = fields.linkedin_capture;
     if (fields.instagram_username !== undefined) dbFields.instagram_username = fields.instagram_username;
     if (fields.instagram_capture !== undefined) dbFields.instagram_capture = fields.instagram_capture;
+    if (fields.email !== undefined) dbFields.email = normaliseEmail(fields.email);
 
     const { error } = await this.supabase
       .schema("kit")

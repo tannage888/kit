@@ -14,6 +14,7 @@ import { ContextBinder, toCanonicalName, ThoughtType } from "../context-binding/
 import { buildCheckinReport, formatCheckinReport, type CheckinContact, type CheckinFollowUp } from "../services/checkin.js";
 import { buildPrepCard, buildDraftContext, type PrepContact, type PrepInteraction, type PrepFollowUp, type PrepBrainContext } from "../services/prep.js";
 import { buildReconnectContext, type ReconnectContact, type ReconnectInteraction } from "../services/reconnect.js";
+import { normaliseEmail } from "../utils/markdown.js";
 
 // ── Supabase clients (initialised eagerly at module load) ─────────────────────
 
@@ -51,6 +52,7 @@ export interface Contact {
   origin_story: string | null;
   notes: string | null;
   whatsapp: string | null;
+  email: string | null;
   active: boolean;
 }
 
@@ -629,6 +631,7 @@ export interface CreateContactInput {
   notes?: string;
   social_battery_cost?: string;
   whatsapp?: string;
+  email?: string;
   whatsapp_capture?: "enabled" | "disabled";
   wa_capture?: "auto" | "on_demand" | "off";
 }
@@ -1001,6 +1004,7 @@ export interface UpdateContactInput {
   origin_story?: string;
   special_interests?: string;
   whatsapp?: string;
+  email?: string;
   active?: boolean;
 }
 
@@ -1076,6 +1080,12 @@ export async function updateContactFields(input: UpdateContactInput): Promise<st
   if (input.whatsapp !== undefined) {
     dbFields.whatsapp = input.whatsapp || null;
     changes.push(input.whatsapp ? `WhatsApp → ${input.whatsapp}` : "WhatsApp cleared");
+  }
+
+  if (input.email !== undefined) {
+    const email = normaliseEmail(input.email);
+    dbFields.email = email;
+    changes.push(email ? `email → ${email}` : "email cleared");
   }
 
   if (input.active !== undefined) {

@@ -26,6 +26,7 @@ export interface ContactRow {
   special_interests: string | null;
   sensitive_topics: string | null;
   preferred_channel: string | null;
+  email: string | null;
   birthday: string | null;
   whatsapp_capture: "enabled" | "disabled";
   notes: string | null;
@@ -67,6 +68,19 @@ export interface InteractionRow {
 
 export function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+/**
+ * Normalise a contact email for storage: trimmed, or null when absent or blank.
+ *
+ * Case is left as typed — kit.contacts carries a case-insensitive index on
+ * lower(email), so flattening what the user wrote buys nothing and loses the
+ * capitalisation people use in their own corporate addresses.
+ */
+export function normaliseEmail(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 export function frequencyToDays(frequency: string): number {
@@ -203,6 +217,7 @@ export function parseContactFile(
   const special_interests = extractSection(content, "Interests & Hooks", "Interests") ?? null;
   const sensitive_topics = extractSection(content, "Sensitive Topics") ?? null;
   const preferred_channel = fm.preferred_channel ? String(fm.preferred_channel) : null;
+  const email = normaliseEmail(fm.email);
   const birthday = fm.birthday ? String(fm.birthday) : null;
   const whatsapp_capture: "enabled" | "disabled" =
     fm.whatsapp_capture === "enabled" ? "enabled" : "disabled";
@@ -227,6 +242,7 @@ export function parseContactFile(
       special_interests,
       sensitive_topics,
       preferred_channel,
+      email,
       birthday,
       whatsapp_capture,
       notes: notesSection ?? null,
@@ -368,6 +384,7 @@ export function generateContactFile(
   if (contact.instagram_username)  lines.push(`instagram_username: ${contact.instagram_username}`);
   lines.push(`instagram_capture: ${contact.instagram_capture}`);
   if (contact.preferred_channel)   lines.push(`preferred_channel: ${contact.preferred_channel}`);
+  if (contact.email)               lines.push(`email: ${contact.email}`);
   if (contact.birthday)            lines.push(`birthday: ${contact.birthday}`);
   if (contact.url)                 lines.push(`url: ${contact.url}`);
   if (contact.whatsapp_groups)     lines.push(`whatsapp_groups: ${contact.whatsapp_groups}`);

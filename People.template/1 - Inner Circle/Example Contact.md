@@ -14,6 +14,7 @@ special_interests: Cricket, Welsh history, sourdough.
 sensitive_topics: Recent divorce — don't ask about the ex.
 preferred_channel: WhatsApp       # WhatsApp | Email | LinkedIn | Phone | In-Person
 whatsapp_number: "+447700900123"
+email: example@company.com       # their address — never bury it in notes
 
 # Optional
 birthday: 1985-07-14

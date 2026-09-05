@@ -197,6 +197,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "string",
             description: "WhatsApp number in E.164 format (e.g. \"+44 7956 289692\") if known",
           },
+          email: {
+            type: "string",
+            description:
+              "Email address, if known. Store it here rather than burying it in notes — " +
+              "it is a first-class field on the contact record.",
+          },
           whatsapp_capture: {
             type: "string",
             enum: ["enabled", "disabled"],
@@ -441,7 +447,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "update-contact",
       description:
         "Update a contact's settings: how often you stay in touch (frequency), their tier, " +
-        "social battery cost, notes, WhatsApp number, or active status. Use this when the " +
+        "social battery cost, notes, WhatsApp number, email address, or active status. Use this when the " +
         "user wants to change a contact's cadence (e.g. 'see Barry monthly instead of weekly'), " +
         "re-prioritise a relationship, archive/unarchive someone, or edit their profile. " +
         "Changing frequency reschedules the next catch-up automatically. " +
@@ -485,6 +491,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           whatsapp: {
             type: "string",
             description: "WhatsApp number in E.164 format (e.g. +447…), or empty string to clear.",
+          },
+          email: {
+            type: "string",
+            description: "Email address, or empty string to clear. Replaces any existing address.",
           },
           active: {
             type: "boolean",
@@ -668,6 +678,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           notes: args?.notes ? String(args.notes) : undefined,
           social_battery_cost: args?.social_battery_cost ? String(args.social_battery_cost) : undefined,
           whatsapp: args?.whatsapp ? String(args.whatsapp) : undefined,
+          email: args?.email ? String(args.email) : undefined,
           whatsapp_capture: args?.whatsapp_capture as "enabled" | "disabled" | undefined,
           wa_capture: args?.wa_capture as "auto" | "on_demand" | "off" | undefined,
         });
@@ -765,6 +776,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           origin_story: args?.origin_story as string | undefined,
           special_interests: args?.special_interests as string | undefined,
           whatsapp: args?.whatsapp as string | undefined,
+          email: args?.email as string | undefined,
           active: args?.active as boolean | undefined,
         });
         return text(msg);

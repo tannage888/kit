@@ -24,7 +24,7 @@ import { ImportIngestor } from "../services/import-ingestor.js";
 import { ContactCreator, type CreateContactInput } from "../services/contact-creator.js";
 import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
 import { normaliseMessages, toJid, type RawDaemonMessage } from "../utils/wa-messages.js";
-import { parseContactFile } from "../utils/markdown.js";
+import { normaliseEmail, parseContactFile, setFrontmatterField } from "../utils/markdown.js";
 import type { CaptureMode, Channel, GatewayStatus, TrackedContact } from "../types.js";
 import { EnergyService } from "../services/energy.js";
 import { MemoryStore } from "../services/memory-store.js";
@@ -214,6 +214,7 @@ export function createApiRouter(
     tier: z.number().int().min(1).max(3),
     frequency: z.string().min(1),
     whatsapp: z.string().optional(),
+    email: z.string().optional(),
     whatsapp_capture: z.enum(["enabled", "disabled"]).optional(),
     wa_capture: z.enum(["auto", "on_demand", "off"]).optional(),
     origin_story: z.string().optional(),
@@ -348,6 +349,7 @@ export function createApiRouter(
     tier: z.number().int().min(1).max(3).optional(),
     frequency: z.string().min(1).optional(),
     whatsapp: z.string().optional(),
+    email: z.string().optional(),
     whatsapp_capture: z.enum(["enabled", "disabled"]).optional(),
     wa_capture: z.enum(["auto", "on_demand", "off"]).optional(),
     last_contact: z.string().optional(),
@@ -376,10 +378,16 @@ export function createApiRouter(
     }
     const fields = parsed.data;
 
+    // An empty email means "clear it" — normalising here keeps "" out of the
+    // column, which the case-insensitive lower(email) index would otherwise
+    // treat as a real address.
+    const payload: Record<string, unknown> = { ...fields };
+    if (fields.email !== undefined) payload["email"] = normaliseEmail(fields.email);
+
     const { error } = await supabase
       .schema("kit")
       .from("contacts")
-      .update(fields)
+      .update(payload)
       .eq("id", id);
 
     if (error) {
@@ -387,7 +395,7 @@ export function createApiRouter(
       return;
     }
 
-    Object.assign(contact, fields);
+    Object.assign(contact, payload);
     if (fields.wa_capture) contacts.setCaptureMode(id, fields.wa_capture as CaptureMode);
 
     res.json({ ok: true });
@@ -414,6 +422,55 @@ export function createApiRouter(
       }
     }
     res.json({ ok: true, updated, skipped });
+  });
+
+  // ── Email backfill, Supabase → markdown (one-shot migration) ──
+  // The email column was added and populated directly in Supabase, so every
+  // People/*.md file predates it. Regenerating each file would render it from
+  // DB columns alone and drop any hand-written section Supabase does not hold,
+  // so this patches the one frontmatter key in place and leaves the rest of
+  // the file byte-for-byte untouched. POST {"dryRun": true} to preview.
+
+  api.post("/contacts/backfill-email-md", async (req: Request, res: Response) => {
+    const dryRun = req.body?.dryRun === true;
+
+    const { data, error } = await supabase
+      .schema("kit")
+      .from("contacts")
+      .select("id, email")
+      .not("email", "is", null);
+
+    if (error) {
+      res.status(500).json({ error: "db_read_failed", detail: error.message });
+      return;
+    }
+
+    const emailById = new Map<string, string>(
+      (data ?? []).map((row: { id: string; email: string }) => [row.id, row.email])
+    );
+    const details: Array<{ id: string; file: string; email: string }> = [];
+
+    for (const { dir, tier } of TIER_DIRS) {
+      const tierPath = path.join(PEOPLE_DIR, dir);
+      if (!fs.existsSync(tierPath)) continue;
+      for (const file of fs.readdirSync(tierPath).filter((f) => f.endsWith(".md"))) {
+        const filePath = path.join(tierPath, file);
+        try {
+          const { contact } = parseContactFile(filePath, tier);
+          const email = emailById.get(contact.id);
+          if (!email || contact.email === email) continue;
+          if (!dryRun) {
+            const raw = fs.readFileSync(filePath, "utf-8");
+            fs.writeFileSync(filePath, setFrontmatterField(raw, "email", email), "utf-8");
+          }
+          details.push({ id: contact.id, file, email });
+        } catch {
+          // malformed file — skip
+        }
+      }
+    }
+
+    res.json({ ok: true, dryRun, filesChanged: details.length, details });
   });
 
   // ── Capture mode ─────────────────────────────────────────

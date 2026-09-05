@@ -39,6 +39,7 @@ const contact: TrackedContact = {
   instagram_username: null,
   instagram_capture: "disabled",
   whatsapp_groups: null,
+  email: null,
   url: null,
   active: true,
 };

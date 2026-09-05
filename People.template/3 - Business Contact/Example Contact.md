@@ -8,6 +8,7 @@ social_battery_cost: Low
 whatsapp_capture: disabled
 origin_story: Met at a WisdomTree investor day; introduced by Graham.
 preferred_channel: LinkedIn
+email: example@company.com
 url: https://www.linkedin.com/in/example-business
 ---
 
