@@ -14,6 +14,7 @@ import { ContextBinder, toCanonicalName, ThoughtType } from "../context-binding/
 import { buildCheckinReport, formatCheckinReport, type CheckinContact, type CheckinFollowUp } from "../services/checkin.js";
 import { buildPrepCard, buildDraftContext, type PrepContact, type PrepInteraction, type PrepFollowUp, type PrepBrainContext } from "../services/prep.js";
 import { buildReconnectContext, type ReconnectContact, type ReconnectInteraction } from "../services/reconnect.js";
+import { normaliseEmail } from "../utils/markdown.js";
 
 // ── Supabase clients (initialised eagerly at module load) ─────────────────────
 
@@ -51,6 +52,7 @@ export interface Contact {
   origin_story: string | null;
   notes: string | null;
   whatsapp: string | null;
+  email: string | null;
   active: boolean;
 }
 
@@ -239,6 +241,12 @@ export interface LogInteractionInput {
   date?: string; // defaults to today
   channel?: string; // defaults to "other"
   follow_ups?: string[]; // new follow-up items to create
+  /**
+   * The WhatsApp message this entry records, when it is one message Kit sent
+   * itself. The sweep reads sent messages back off WhatsApp, so without this
+   * it summarises them again and the send is logged twice.
+   */
+  wa_message_id?: string;
 }
 
 export async function logInteraction(input: LogInteractionInput): Promise<string> {
@@ -250,12 +258,16 @@ export async function logInteraction(input: LogInteractionInput): Promise<string
   const channel = input.channel ?? "other";
 
   // Write to interaction_log
+  // Only send wa_message_id when there is one, so a database without the
+  // migration applied still accepts every other write rather than failing
+  // on an unknown column.
   const { error: logError } = await db.from("interaction_log").insert({
     id: crypto.randomUUID(),
     contact_id: contact.id,
     date,
     channel,
     notes: input.notes,
+    ...(input.wa_message_id ? { wa_message_id: input.wa_message_id } : {}),
   });
   if (logError) throw new Error(`interaction_log insert failed: ${logError.message}`);
 
@@ -524,6 +536,9 @@ export async function sendMessage(input: {
         contact_name: contact.id,
         notes: `Sent via WhatsApp: ${text}`,
         channel: "whatsapp",
+        // Lets the sweep recognise its own send when it reads the message
+        // back, instead of summarising it as a second interaction.
+        wa_message_id: data?.messageId ?? undefined,
       });
       logNote = "\nLogged as an interaction — last contact and next action updated.";
     } catch (err: any) {
@@ -616,6 +631,7 @@ export interface CreateContactInput {
   notes?: string;
   social_battery_cost?: string;
   whatsapp?: string;
+  email?: string;
   whatsapp_capture?: "enabled" | "disabled";
   wa_capture?: "auto" | "on_demand" | "off";
 }
@@ -988,6 +1004,7 @@ export interface UpdateContactInput {
   origin_story?: string;
   special_interests?: string;
   whatsapp?: string;
+  email?: string;
   active?: boolean;
 }
 
@@ -1063,6 +1080,12 @@ export async function updateContactFields(input: UpdateContactInput): Promise<st
   if (input.whatsapp !== undefined) {
     dbFields.whatsapp = input.whatsapp || null;
     changes.push(input.whatsapp ? `WhatsApp → ${input.whatsapp}` : "WhatsApp cleared");
+  }
+
+  if (input.email !== undefined) {
+    const email = normaliseEmail(input.email);
+    dbFields.email = email;
+    changes.push(email ? `email → ${email}` : "email cleared");
   }
 
   if (input.active !== undefined) {

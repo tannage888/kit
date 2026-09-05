@@ -19,7 +19,7 @@ import { fileURLToPath } from "url";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
 import { ContactRegistry } from "./contacts.js";
-import { generateContactFile, type ContactRow } from "../utils/markdown.js";
+import { generateContactFile, normaliseEmail, type ContactRow } from "../utils/markdown.js";
 import type { CaptureMode } from "../types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -47,6 +47,7 @@ export interface CreateContactInput {
   notes?: string;
   social_battery_cost?: string;
   whatsapp?: string;
+  email?: string;
   whatsapp_capture?: "enabled" | "disabled";
   wa_capture?: "auto" | "on_demand" | "off";
 }
@@ -80,6 +81,7 @@ export class ContactCreator {
 
     const frequency_days = FREQUENCY_DAYS[input.frequency.toLowerCase()] ?? 30;
     const whatsapp = input.whatsapp ?? null;
+    const email = normaliseEmail(input.email);
     const whatsapp_capture = input.whatsapp_capture ?? "disabled";
     const wa_capture: CaptureMode = (input.wa_capture as CaptureMode) ?? "on_demand";
 
@@ -98,6 +100,7 @@ export class ContactCreator {
       origin_story: input.origin_story ?? null,
       notes: input.notes ?? null,
       whatsapp,
+      email,
       active: true,
       wa_capture,
       whatsapp_capture,
@@ -120,6 +123,7 @@ export class ContactCreator {
       special_interests: null,
       sensitive_topics: null,
       preferred_channel: null,
+      email,
       birthday: null,
       whatsapp_capture,
       notes: input.notes ?? null,
@@ -152,6 +156,7 @@ export class ContactCreator {
       instagram_username: null,
       instagram_capture: "disabled",
       whatsapp_groups: null,
+      email,
       url: null,
       active: true,
     });

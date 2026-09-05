@@ -17,10 +17,11 @@ Collect the details below by asking the user one at a time. If the user provides
 
 **Optional but recommended:**
 4. WhatsApp number in E.164 format (e.g. `+44 7956 289692`) — required if you want to use WhatsApp capture or ZIP imports for this contact
-5. Origin story (one or two sentences: how you know them, their role, context)
-6. Social battery cost (Low / Medium / High — how much energy this contact typically takes)
-7. WhatsApp capture (`enabled` / `disabled`) — only ask if a WhatsApp number was provided. Default to `disabled` per Kit's privacy posture; the user can answer "yes/enable" to opt in.
-8. Notes (any extra context to seed)
+5. Email address — ask for this on every contact, and always for tier 3 business contacts. It goes in the `email` field, never in the notes.
+6. Origin story (one or two sentences: how you know them, their role, context)
+7. Social battery cost (Low / Medium / High — how much energy this contact typically takes)
+8. WhatsApp capture (`enabled` / `disabled`) — only ask if a WhatsApp number was provided. Default to `disabled` per Kit's privacy posture; the user can answer "yes/enable" to opt in.
+9. Notes (any extra context to seed)
 
 Once you have the required fields (plus whatever optional ones the user provided), POST to the Kit gateway:
 
@@ -33,6 +34,7 @@ Content-Type: application/json
   "tier": <1|2|3>,
   "frequency": "<frequency>",
   "whatsapp": "<E.164 if provided>",
+  "email": "<email if provided>",
   "whatsapp_capture": "<enabled|disabled if provided>",
   "wa_capture": "on_demand",
   "origin_story": "<if provided>",

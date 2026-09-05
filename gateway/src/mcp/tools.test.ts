@@ -21,7 +21,8 @@ const state: {
   contacts: any[];
   interactions: any[];
   updates: Array<{ table: string; fields: Record<string, unknown> }>;
-} = { contacts: [], interactions: [], updates: [] };
+  inserts: Array<{ table: string; row: Record<string, unknown> }>;
+} = { contacts: [], interactions: [], updates: [], inserts: [] };
 
 function tableRows(table: string) {
   return table === "contacts" ? state.contacts : state.interactions;
@@ -60,7 +61,10 @@ function makeQuery(table: string) {
       state.updates.push({ table, fields });
       return q;
     },
-    insert: () => q,
+    insert: (row: Record<string, unknown>) => {
+      state.inserts.push({ table, row });
+      return q;
+    },
     then: (resolve: (v: any) => void) => resolve({ data: rows, error: null }),
   };
   return q;
@@ -115,6 +119,7 @@ beforeEach(() => {
   state.contacts = [{ ...CONTACT }];
   state.interactions = [];
   state.updates = [];
+  state.inserts = [];
   captured.length = 0;
   captureSucceeds = true;
 });
@@ -493,6 +498,33 @@ describe("sendMessage", () => {
 
     const thought = captured.find((c) => c.thoughtType === ThoughtType.INTERACTION);
     expect(thought?.content).toContain("Dinner Saturday?");
+  });
+
+  it("records which WhatsApp message it sent, so the sweep does not log it again", async () => {
+    await sendMessage({ contact_name: "Becks", text: "Dinner Saturday?" });
+
+    // Without this the sweep reads the sent message back off WhatsApp a few
+    // hours later, has no way to recognise it, and files a second interaction
+    // for the same message.
+    const insert = state.inserts.find((i) => i.table === "interaction_log");
+    expect(insert?.row.wa_message_id).toBe("3EB0ABC");
+  });
+
+  it("logs the send even when the daemon returns no message id", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+      text: async () => "",
+    });
+
+    await sendMessage({ contact_name: "Becks", text: "Dinner Saturday?" });
+
+    // No id to dedupe on later, but the message did leave — dropping the log
+    // entry would be a worse record than a duplicate.
+    const insert = state.inserts.find((i) => i.table === "interaction_log");
+    expect(insert).toBeDefined();
+    expect(insert?.row.wa_message_id).toBeUndefined();
   });
 
   it("records nothing when logging is switched off", async () => {

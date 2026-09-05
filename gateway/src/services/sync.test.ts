@@ -182,6 +182,7 @@ describe("toContactRow", () => {
     expect(row.special_interests).toBeNull();
     expect(row.notes).toBeNull();
     expect(row.whatsapp_groups).toBeNull();
+    expect(row.email).toBeNull();
     expect(row.url).toBeNull();
     expect(row.last_contact).toBeNull();
   });
@@ -190,6 +191,10 @@ describe("toContactRow", () => {
     const row = toContactRow(minimal);
     expect(row.frequency_days).toBe(30);
     expect(row.active).toBe(true);
+  });
+
+  it("carries email through so it reaches the markdown frontmatter", () => {
+    expect(toContactRow({ ...minimal, email: "alice@corp.com" }).email).toBe("alice@corp.com");
   });
 
   it("preserves an explicit active: false", () => {

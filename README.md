@@ -226,4 +226,5 @@ whatsapp_capture: enabled    # enabled | disabled (default: disabled)
 wa_capture: on_demand        # on_demand | auto | off
 birthday: 1990-04-21
 preferred_channel: whatsapp
+email: alice@example.com
 ```

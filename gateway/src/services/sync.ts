@@ -304,6 +304,7 @@ export function toContactRow(row: any): ContactRow {
     special_interests: row.special_interests ?? null,
     sensitive_topics: row.sensitive_topics ?? null,
     preferred_channel: row.preferred_channel ?? null,
+    email: row.email ?? null,
     birthday: row.birthday ?? null,
     whatsapp_capture: row.whatsapp_capture === "enabled" ? "enabled" : "disabled",
     notes: row.notes ?? null,

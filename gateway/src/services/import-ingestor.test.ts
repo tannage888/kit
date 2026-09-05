@@ -21,7 +21,8 @@ function makeContact(overrides: Partial<TrackedContact> = {}): TrackedContact {
     instagram_username: null,
     instagram_capture: "disabled",
     whatsapp_groups: null,
-    url: null,
+    email: null,
+  url: null,
     active: true,
     ...overrides,
   };

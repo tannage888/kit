@@ -11,6 +11,7 @@ import {
   extractPhone,
   parseContactFile,
   generateContactFile,
+  normaliseEmail,
   setFrontmatterField,
   prependInteractionEntry,
   appendFollowUp,
@@ -73,6 +74,29 @@ describe("frequencyToDays", () => {
 
   it("defaults to 30 for unknown input", () => {
     expect(frequencyToDays("whenever")).toBe(30);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normaliseEmail
+// ---------------------------------------------------------------------------
+
+describe("normaliseEmail", () => {
+  it("trims surrounding whitespace", () => {
+    expect(normaliseEmail("  owen@vident.co.uk  ")).toBe("owen@vident.co.uk");
+  });
+
+  it("preserves the case the address was written in", () => {
+    // kit.contacts indexes lower(email), so there is nothing to gain from
+    // flattening a corporate address the person capitalises themselves.
+    expect(normaliseEmail("Thomas.Andrew@Tidal.com")).toBe("Thomas.Andrew@Tidal.com");
+  });
+
+  it("returns null for absent or blank values", () => {
+    expect(normaliseEmail(undefined)).toBeNull();
+    expect(normaliseEmail(null)).toBeNull();
+    expect(normaliseEmail("")).toBeNull();
+    expect(normaliseEmail("   ")).toBeNull();
   });
 });
 
@@ -239,6 +263,21 @@ describe("setFrontmatterField", () => {
     const result = setFrontmatterField(frontmatterDoc, "frequency", "Monthly");
     expect(result).toContain("frequency: Monthly");
   });
+
+  it("adds an email that parseContactFile then reads back", () => {
+    // The contract the Supabase-to-markdown email backfill relies on: patch the
+    // one key, leave the rest of the file alone, and have the parser see it.
+    const patched = setFrontmatterField(frontmatterDoc, "email", "owen@vident.co.uk");
+    const tmpPath = path.join(os.tmpdir(), `kit-test-email-${Date.now()}.md`);
+    fs.writeFileSync(tmpPath, patched, "utf-8");
+    try {
+      const { contact } = parseContactFile(tmpPath, 3);
+      expect(contact.email).toBe("owen@vident.co.uk");
+      expect(patched).toContain("Body content here.");
+    } finally {
+      fs.unlinkSync(tmpPath);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -375,6 +414,7 @@ name: Alice Example
 frequency: Monthly
 whatsapp: "+447700900001"
 preferred_channel: whatsapp
+email: Alice.Example@Corp.com
 birthday: "1990-05-15"
 whatsapp_capture: enabled
 social_battery: medium
@@ -395,6 +435,7 @@ Don't mention their ex
     const { contact } = parseContactFile(tmpPath, 2);
 
     expect(contact.preferred_channel).toBe("whatsapp");
+    expect(contact.email).toBe("Alice.Example@Corp.com");
     expect(contact.birthday).toBe("1990-05-15");
     expect(contact.whatsapp_capture).toBe("enabled");
     expect(contact.special_interests).toContain("Board games");
@@ -418,6 +459,7 @@ Old contact, no new fields.
     const { contact } = parseContactFile(tmpPath, 3);
 
     expect(contact.whatsapp_capture).toBe("disabled");
+    expect(contact.email).toBeNull();
     expect(contact.preferred_channel).toBeNull();
     expect(contact.birthday).toBeNull();
     expect(contact.special_interests).toBeNull();
@@ -492,6 +534,7 @@ describe("generateContactFile", () => {
     special_interests: "Cricket, sourdough.",
     sensitive_topics: "Recent divorce.",
     preferred_channel: "WhatsApp",
+    email: "alice@example.com",
     birthday: "1985-07-14",
     whatsapp_capture: "enabled",
     notes: "Ask about mum.",
@@ -514,6 +557,7 @@ describe("generateContactFile", () => {
     expect(output).toContain("whatsapp: \"+447700900123\"");
     expect(output).toContain("url: https://linkedin.com/in/alice");
     expect(output).toContain("whatsapp_capture: enabled");
+    expect(output).toContain("email: alice@example.com");
   });
 
   it("omits null optional fields from frontmatter", () => {
