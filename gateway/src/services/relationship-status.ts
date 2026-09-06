@@ -35,16 +35,28 @@ export interface OccasionTrigger {
  *   Monthly (30d):  green ≤30, yellow 31–60, red 61–90, black 91+
  *   Quarterly (90d): green ≤90, yellow 91–180, red 181–270, black 271+
  *
+ * A `nextAction` date in the future is a deliberate "not yet" — a follow-up
+ * Mark has consciously scheduled — so the contact reads green until it
+ * arrives. For contacts whose next_action is just last_contact + cadence this
+ * changes nothing, because that date passes exactly when they fall overdue.
+ * It only matters when the date has been pushed out on purpose.
+ *
  * @param lastContact  ISO date string (YYYY-MM-DD) or null (never contacted)
  * @param frequencyDays  Target contact interval in days (7 | 30 | 90 etc.)
  * @param today  ISO date string for "today" (allows deterministic testing)
+ * @param nextAction  ISO date of the scheduled follow-up, or null
  */
 export function computeDriftStatus(
   lastContact: string | null,
   frequencyDays: number,
-  today: string
+  today: string,
+  nextAction?: string | null
 ): DriftStatus {
   if (!lastContact) return "black";
+
+  // Never contacted stays black above: a scheduled date does not stand in for
+  // a relationship that has not started.
+  if (nextAction && diffDays(today, nextAction) > 0) return "green";
 
   const daysSince = diffDays(lastContact, today);
   const overdueDays = daysSince - frequencyDays;
