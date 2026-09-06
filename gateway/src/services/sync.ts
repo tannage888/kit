@@ -93,8 +93,14 @@ export class SyncService {
         try {
           const { contact } = parseContactFile(filePath, tier);
           this.contactFileMap.set(contact.id, filePath);
-        } catch {
-          // malformed file — skip
+        } catch (err) {
+          // A file that will not parse is not a harmless skip: its contact is
+          // absent from the map, so every Supabase change for them silently
+          // fails to reach the markdown. One unquoted colon in a frontmatter
+          // value hid a contact this way. Say so loudly enough to be fixed.
+          console.warn(
+            `  ⚠️  unparseable contact file, sync will not reach it: ${filePath} — ${(err as Error).message}`
+          );
         }
       }
     }
