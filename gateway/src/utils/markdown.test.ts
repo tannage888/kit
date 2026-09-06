@@ -42,6 +42,15 @@ describe("slugify", () => {
   it("handles single name", () => {
     expect(slugify("Beyoncé")).toBe("beyonc");
   });
+
+  it("collapses both apostrophe forms to the same id", () => {
+    // Supabase and the filesystem disagree about which apostrophe a name uses.
+    // Anything that pairs a contact row with its file has to go through slugify
+    // rather than compare names: matching on the raw name reported two
+    // inner-circle contacts as having no markdown file when they both did.
+    expect(slugify("Keyan O’Donnell")).toBe("keyan_o_donnell");
+    expect(slugify("Keyan O'Donnell")).toBe("keyan_o_donnell");
+  });
 });
 
 // ---------------------------------------------------------------------------

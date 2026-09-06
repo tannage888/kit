@@ -24,7 +24,8 @@ import { ImportIngestor } from "../services/import-ingestor.js";
 import { ContactCreator, type CreateContactInput } from "../services/contact-creator.js";
 import { buildWhatsAppLink, isValidE164 } from "../utils/wa-link.js";
 import { normaliseMessages, toJid, type RawDaemonMessage } from "../utils/wa-messages.js";
-import { normaliseEmail, parseContactFile, setFrontmatterField } from "../utils/markdown.js";
+import { generateContactFile, normaliseEmail, parseContactFile, setFrontmatterField, type FollowUpRow, type InteractionRow } from "../utils/markdown.js";
+import { toContactRow } from "../services/sync.js";
 import type { CaptureMode, Channel, GatewayStatus, TrackedContact } from "../types.js";
 import { EnergyService } from "../services/energy.js";
 import { MemoryStore } from "../services/memory-store.js";
@@ -471,6 +472,92 @@ export function createApiRouter(
     }
 
     res.json({ ok: true, dryRun, filesChanged: details.length, details });
+  });
+
+  // ── Missing markdown repair ──────────────────────────────
+  // A contact written straight into Supabase — by an ingestion pass, or any
+  // path that bypasses ContactCreator — never gets a People/*.md file, and
+  // SyncService's startup file map only indexes files that exist. This renders
+  // the missing ones from their DB rows. Safe to re-run: it never overwrites.
+  //
+  // Existing contacts are identified by parsing each file for its id, not by
+  // matching filenames. Supabase and the filesystem disagree about which
+  // apostrophe character a name uses, and filename matching reported two
+  // inner-circle contacts as missing when their files were sitting right there.
+
+  api.post("/contacts/backfill-missing-md", async (req: Request, res: Response) => {
+    const dryRun = req.body?.dryRun === true;
+    const includeInactive = req.body?.includeInactive === true;
+
+    const existingIds = new Set<string>();
+    for (const { dir, tier } of TIER_DIRS) {
+      const tierPath = path.join(PEOPLE_DIR, dir);
+      if (!fs.existsSync(tierPath)) continue;
+      for (const file of fs.readdirSync(tierPath).filter((f) => f.endsWith(".md"))) {
+        try {
+          existingIds.add(parseContactFile(path.join(tierPath, file), tier).contact.id);
+        } catch {
+          // malformed file — leave its contact looking absent rather than
+          // claiming a file that cannot be parsed already covers it
+        }
+      }
+    }
+
+    const query = supabase.schema("kit").from("contacts").select("*");
+    const { data, error } = includeInactive ? await query : await query.eq("active", true);
+    if (error) {
+      res.status(500).json({ error: "db_read_failed", detail: error.message });
+      return;
+    }
+
+    const created: Array<{ id: string; file: string }> = [];
+    const skipped: Array<{ id: string; reason: string }> = [];
+
+    for (const row of data ?? []) {
+      if (existingIds.has(row.id)) continue;
+
+      const contact = toContactRow(row);
+      const tierDir = TIER_DIRS.find((t) => t.tier === contact.tier)?.dir ?? "3 - Business Contact";
+      const filePath = path.join(PEOPLE_DIR, tierDir, `${contact.name}.md`);
+
+      // A file whose name matches but whose parsed id did not is either
+      // malformed or belongs to someone else. Either way, do not clobber it.
+      if (fs.existsSync(filePath)) {
+        skipped.push({ id: row.id, reason: "file_already_at_path" });
+        continue;
+      }
+
+      try {
+        if (!dryRun) {
+          const [fuRes, intRes] = await Promise.all([
+            supabase.schema("kit").from("follow_ups")
+              .select("id, contact_id, text, completed, created_at")
+              .eq("contact_id", contact.id),
+            supabase.schema("kit").from("interaction_log")
+              .select("id, contact_id, notes, date, created_at, channel, group_jid, group_name")
+              .eq("contact_id", contact.id)
+              .order("date", { ascending: false }),
+          ]);
+
+          const dir = path.dirname(filePath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(
+            filePath,
+            generateContactFile(
+              contact,
+              (fuRes.data ?? []) as FollowUpRow[],
+              (intRes.data ?? []) as InteractionRow[]
+            ),
+            "utf-8"
+          );
+        }
+        created.push({ id: row.id, file: path.join(tierDir, `${contact.name}.md`) });
+      } catch (err) {
+        skipped.push({ id: row.id, reason: `write_failed: ${(err as Error).message}` });
+      }
+    }
+
+    res.json({ ok: true, dryRun, filesCreated: created.length, created, skipped });
   });
 
   // ── Capture mode ─────────────────────────────────────────
