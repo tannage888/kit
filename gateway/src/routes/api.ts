@@ -384,6 +384,11 @@ export function createApiRouter(
     // treat as a real address.
     const payload: Record<string, unknown> = { ...fields };
     if (fields.email !== undefined) payload["email"] = normaliseEmail(fields.email);
+    // Same for whatsapp_groups: without this there is no way to clear a bad
+    // value through the API, and "" is not what the column means when empty.
+    if (fields.whatsapp_groups !== undefined) {
+      payload["whatsapp_groups"] = fields.whatsapp_groups.trim() || null;
+    }
 
     const { error } = await supabase
       .schema("kit")
