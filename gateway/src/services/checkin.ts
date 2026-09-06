@@ -77,7 +77,7 @@ export function buildCheckinReport(
   const scored: Scored[] = contacts
     .filter((c) => c.last_contact !== undefined) // defensive
     .map((c) => {
-      const drift = computeDriftStatus(c.last_contact, c.frequency_days, today);
+      const drift = computeDriftStatus(c.last_contact, c.frequency_days, today, c.next_action);
       const safety = computeSafetyIndicator(drift);
       const occasionTriggers = computeOccasions(c.birthday, today);
       return {

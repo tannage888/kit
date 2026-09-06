@@ -34,6 +34,41 @@ describe("computeDriftStatus — Monthly contact (30 days)", () => {
   });
 });
 
+describe("computeDriftStatus — next_action defers the nag", () => {
+  // Overdue on cadence alone: 2026-02-19 is 59 days before TODAY, so a
+  // monthly contact is 29 days over — yellow.
+  const OVERDUE = "2026-02-19";
+
+  it("is yellow when no follow-up date is set", () => {
+    expect(computeDriftStatus(OVERDUE, MONTHLY, TODAY)).toBe("yellow");
+  });
+
+  it("is green when a follow-up date is still in the future", () => {
+    expect(computeDriftStatus(OVERDUE, MONTHLY, TODAY, "2026-05-03")).toBe("green");
+  });
+
+  it("falls back to cadence once the follow-up date has passed", () => {
+    expect(computeDriftStatus(OVERDUE, MONTHLY, TODAY, "2026-04-01")).toBe("yellow");
+  });
+
+  it("treats a follow-up date of today as due, not deferred", () => {
+    expect(computeDriftStatus(OVERDUE, MONTHLY, TODAY, TODAY)).toBe("yellow");
+  });
+
+  it("ignores a null follow-up date", () => {
+    expect(computeDriftStatus(OVERDUE, MONTHLY, TODAY, null)).toBe("yellow");
+  });
+
+  it("keeps a never-contacted contact black even with a future follow-up", () => {
+    expect(computeDriftStatus(null, MONTHLY, TODAY, "2026-05-03")).toBe("black");
+  });
+
+  it("does not turn an on-cadence contact non-green", () => {
+    // 10 days ago on a monthly cadence: green either way.
+    expect(computeDriftStatus("2026-04-09", MONTHLY, TODAY, "2026-05-09")).toBe("green");
+  });
+});
+
 describe("computeDriftStatus — Weekly contact (7 days)", () => {
   it.each([
     [7,  "green",  "at boundary"],
