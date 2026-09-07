@@ -19,7 +19,7 @@ import { fileURLToPath } from "url";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config } from "../config.js";
 import { ContactRegistry } from "./contacts.js";
-import { generateContactFile, normaliseEmail, type ContactRow } from "../utils/markdown.js";
+import { frequencyToDays, generateContactFile, normaliseEmail, type ContactRow } from "../utils/markdown.js";
 import type { CaptureMode } from "../types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,12 +31,6 @@ const TIER_FOLDER: Record<number, string> = {
   1: "1 - Inner Circle",
   2: "2 - Active",
   3: "3 - Business Contact",
-};
-
-const FREQUENCY_DAYS: Record<string, number> = {
-  weekly: 7, fortnightly: 14, "bi-weekly": 14, monthly: 30,
-  "bi-monthly": 60, quarterly: 90, "twice yearly": 180,
-  "bi-annual": 180, annual: 365, yearly: 365,
 };
 
 export interface CreateContactInput {
@@ -79,7 +73,7 @@ export class ContactCreator {
       .single();
     if (existing) throw new Error(`Contact "${input.name}" already exists (id: ${id})`);
 
-    const frequency_days = FREQUENCY_DAYS[input.frequency.toLowerCase()] ?? 30;
+    const frequency_days = frequencyToDays(input.frequency);
     const whatsapp = input.whatsapp ?? null;
     const email = normaliseEmail(input.email);
     const whatsapp_capture = input.whatsapp_capture ?? "disabled";
