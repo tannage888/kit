@@ -48,3 +48,27 @@ If Kit becomes a product:
 - People folder location becomes configurable, not hardcoded to `projects/kit/People/`
 - Open Brain instance becomes user-configurable (spec §5.8 already flags this)
 - Licensing / update mechanism / telemetry-opt-in decisions
+
+## Rejected: Supabase as the sole source of truth
+
+Unlike everything above, this one is **rejected, not deferred** — recorded here so
+the reasoning is not rediscovered from scratch.
+
+In May 2026 a branch (`supabase-source-of-truth`) flipped the sync direction. All
+writes went to Supabase first, and `People/*.md` became a pure render target:
+`sync.ts` dropped the chokidar watcher entirely, and a `contacts` UPDATE regenerated
+the whole markdown file from DB rows via Realtime.
+
+**What survived:** `generateContactFile()`, the `url` field end-to-end, and the
+render-a-file-from-DB-rows machinery — all of which are in `main` today and are what
+`POST /api/contacts/backfill-missing-md` is built on.
+
+**What was rejected:** the one-way direction. Making markdown a render target means
+you can no longer edit a contact by typing in the file, which is the interaction the
+tool exists to support — a hand-edit would be silently overwritten on the next
+Realtime event. `main` therefore keeps bidirectional sync with `People/*.md` as source
+of truth and the 3-second loop-prevention guard per contact on each direction.
+
+**If this is revisited,** the thing to solve first is hand-edits: either the file
+stops being editable (and something else becomes the fast capture path), or writes
+from the file keep winning. The 2026 branches were deleted once this note existed.
