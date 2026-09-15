@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Kit Cadence Roster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #FAF8F9;
+    --surface: #FFFFFF;
+    --surface-2: #F1ECF1;
+    --ink: #221D25;
+    --ink-2: #5F5566;
+    --muted: #8B8091;
+    --line: #E5DDE5;
+    --line-strong: #CFC2CF;
+    --accent: #6D2E58;
+    --accent-soft: #F0E2EC;
+    --sig-over: #A83A2B;
+    --sig-over-bg: #F6E3DF;
+    --sig-soon: #8F6410;
+    --sig-soon-bg: #F5EBD8;
+    --sig-ok: #47703F;
+    --sig-ok-bg: #E4EDE1;
+    --sig-none: #6C5F75;
+    --sig-none-bg: #EBE6EE;
+    --sig-dorm: #948C9A;
+    --sig-dorm-bg: #EEEBEF;
+    --shadow: 0 1px 2px rgba(34, 29, 37, .06), 0 8px 24px -18px rgba(34, 29, 37, .35);
+    --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --body: "Karla", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #17131A;
+      --surface: #1E1922;
+      --surface-2: #2A2330;
+      --ink: #F1EAF1;
+      --ink-2: #BEB2C3;
+      --muted: #8D8296;
+      --line: #352C3B;
+      --line-strong: #4C4053;
+      --accent: #DBA3C8;
+      --accent-soft: #3A2434;
+      --sig-over: #EE9084;
+      --sig-over-bg: #46251F;
+      --sig-soon: #E2B662;
+      --sig-soon-bg: #3E301A;
+      --sig-ok: #93C388;
+      --sig-ok-bg: #24361F;
+      --sig-none: #AC9EB3;
+      --sig-none-bg: #322A38;
+      --sig-dorm: #7C7482;
+      --sig-dorm-bg: #262029;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 28px -20px rgba(0, 0, 0, .9);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #17131A;
+    --surface: #1E1922;
+    --surface-2: #2A2330;
+    --ink: #F1EAF1;
+    --ink-2: #BEB2C3;
+    --muted: #8D8296;
+    --line: #352C3B;
+    --line-strong: #4C4053;
+    --accent: #DBA3C8;
+    --accent-soft: #3A2434;
+    --sig-over: #EE9084;
+    --sig-over-bg: #46251F;
+    --sig-soon: #E2B662;
+    --sig-soon-bg: #3E301A;
+    --sig-ok: #93C388;
+    --sig-ok-bg: #24361F;
+    --sig-none: #AC9EB3;
+    --sig-none-bg: #322A38;
+    --sig-dorm: #7C7482;
+    --sig-dorm-bg: #262029;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 28px -20px rgba(0, 0, 0, .9);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 22px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* ---- masthead ---- */
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px 24px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .masthead h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 30px;
+    line-height: 1.1;
+    letter-spacing: -.01em;
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  .masthead p {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 14px;
+    max-width: 58ch;
+  }
+  .stamp {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.7;
+  }
+  .stamp b { color: var(--ink-2); font-weight: 600; }
+
+  /* ---- status strip (summary + filter) ---- */
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .stat {
+    appearance: none;
+    text-align: left;
+    font-family: var(--body);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 11px 13px 12px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    transition: border-color .14s ease, background .14s ease;
+    border-left: 3px solid var(--dot, var(--line-strong));
+  }
+  .stat:hover { border-color: var(--line-strong); }
+  .stat[aria-pressed="true"] {
+    background: var(--tint, var(--accent-soft));
+    border-color: var(--dot, var(--accent));
+  }
+  .stat .n {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.05;
+    color: var(--dot, var(--ink));
+  }
+  .stat .k {
+    font-size: 11.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .stat .sub { font-size: 12px; color: var(--muted); }
+
+  /* ---- tier pressure ---- */
+  .pressure {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 15px 17px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .pressure h2, .roster h2 {
+    font-family: var(--body);
+    font-size: 11.5px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--muted);
+    margin: 0;
+  }
+  .tierline {
+    display: grid;
+    grid-template-columns: 132px 1fr 44px;
+    align-items: center;
+    gap: 12px;
+  }
+  .tierline .lbl { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+  .tierline .lbl em { font-style: normal; color: var(--muted); }
+  .tierbar {
+    display: flex;
+    height: 12px;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--surface-2);
+  }
+  .tierbar span { display: block; height: 100%; }
+  .tierline .tot {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    text-align: right;
+  }
+
+  /* ---- controls ---- */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .search {
+    flex: 1 1 220px;
+    min-width: 180px;
+    font-family: var(--body);
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 8px 11px;
+  }
+  .search::placeholder { color: var(--muted); }
+  .chips { display: flex; gap: 6px; }
+  .chip {
+    appearance: none;
+    font-family: var(--body);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: var(--ink-2);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 13px;
+    cursor: pointer;
+    transition: border-color .14s ease, color .14s ease, background .14s ease;
+  }
+  .chip:hover { border-color: var(--line-strong); }
+  .chip[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--surface);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .chip[aria-pressed="true"] { color: #17131A; }
+  }
+  :root[data-theme="dark"] .chip[aria-pressed="true"] { color: #17131A; }
+  .sel {
+    font-family: var(--body);
+    font-size: 13px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 7px 9px;
+    color: var(--ink);
+  }
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--ink-2);
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+  :where(button, input, select, a):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---- roster ---- */
+  .roster {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .roster > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 17px 11px;
+  }
+  .roster > header .count {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .scroller { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; }
+  thead th {
+    font-size: 10.5px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--muted);
+    text-align: left;
+    padding: 7px 10px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  thead th.num { text-align: right; }
+  tbody td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.dorm .who .nm { color: var(--muted); }
+  .who { display: flex; flex-direction: column; gap: 1px; min-width: 150px; }
+  .who .nm { font-weight: 600; font-size: 14.5px; letter-spacing: -.005em; }
+  .who .cad { font-size: 11.5px; color: var(--muted); }
+  td.tier { width: 54px; }
+  .tierpip {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    color: var(--ink-2);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 2px 6px;
+    white-space: nowrap;
+  }
+  td.state { width: 108px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    padding: 3px 8px 3px 6px;
+    border-radius: 3px;
+    color: var(--pc);
+    background: var(--pb);
+    white-space: nowrap;
+  }
+  .pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pc);
+    flex: none;
+  }
+
+  /* the cadence meter: track = the contact's own cadence window, then the overdue zone */
+  td.meter { width: 40%; min-width: 180px; }
+  .track {
+    position: relative;
+    height: 9px;
+    border-radius: 2px;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .track .zone {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 72%;
+    right: 0;
+    background: var(--sig-over-bg);
+  }
+  .track .bound {
+    position: absolute;
+    top: -2px; bottom: -2px;
+    left: 72%;
+    width: 1px;
+    background: var(--line-strong);
+  }
+  .track .fill {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    background: var(--fc, var(--sig-ok));
+    border-radius: 2px 0 0 2px;
+  }
+  .track.empty {
+    background: repeating-linear-gradient(
+      135deg, var(--surface-2) 0 4px, transparent 4px 8px
+    );
+    border: 1px dashed var(--line-strong);
+    height: 9px;
+  }
+  td.days, td.seen {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 12.5px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  td.days { width: 86px; font-weight: 600; color: var(--dc, var(--ink-2)); }
+  td.seen { width: 96px; color: var(--muted); }
+  td.chan { width: 78px; }
+  .chan .dots { display: flex; gap: 3px; justify-content: flex-end; }
+  .cdot {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    line-height: 1;
+    width: 17px;
+    height: 15px;
+    display: grid;
+    place-items: center;
+    border-radius: 2px;
+    border: 1px solid transparent;
+  }
+  .cdot.on { background: var(--accent); color: var(--surface); }
+  :root[data-theme="dark"] .cdot.on { color: #17131A; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .cdot.on { color: #17131A; }
+  }
+  .cdot.off { border-color: var(--line-strong); color: var(--ink-2); }
+  .cdot.none { color: var(--line-strong); }
+
+  .empty-msg {
+    padding: 26px 17px 30px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  footer.notes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 26px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.6;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+  footer.notes p { margin: 0; max-width: 62ch; }
+  footer.notes code {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: var(--surface-2);
+    padding: 1px 4px;
+    border-radius: 2px;
+    color: var(--ink-2);
+  }
+
+  @media (max-width: 720px) {
+    .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stat .sub { display: none; }
+    .tierline { grid-template-columns: 96px 1fr 40px; }
+    .masthead { align-items: flex-start; }
+    .stamp { text-align: left; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+<script>
+  /* Runs before first paint, so the page never flashes light on its way to dark.
+     Default is dark: this page is the local twin of an artifact that rendered in
+     the Claude app's theme, and matching it matters more here than following an
+     OS setting the roster has no opinion about. */
+  (function () {
+    var t = "dark";
+    try { t = localStorage.getItem("kit-roster-theme") || "dark"; } catch (e) { /* private mode */ }
+    document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+  })();
+</script>
+</head>
+<body>
+<style>
+  /* ---- live controls (added for the on-demand refresh build) ---- */
+  /* Form controls (the select, the search field, the checkbox) are painted by
+     the browser, not by these tokens. Without a color-scheme they keep their
+     light chrome on the dark palette and give the page away as a hybrid. */
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+
+  .stamp .stampline { display: block; }
+  .stamp .stampline.bad { color: var(--sig-over); }
+  .stamp .stampline.bad b { color: var(--sig-over); }
+
+  /* No scrollbar gutter. The masthead is a two-line stamp and nothing else, so
+     a scrollbar down the right edge is the one element that breaks the page's
+     silhouette. Scrolling itself is untouched — wheel, trackpad, keys and
+     touch all still work; only the bar is hidden. */
+  html { scrollbar-width: none; }
+  html::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .scroller { scrollbar-width: none; }
+  .scroller::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+  /* Refresh and the theme switch live with the other controls rather than under
+     the stamp, so the masthead keeps the two-line shape it was designed with. */
+  .controls .spacer { flex: 1 1 0; min-width: 0; }
+  .chip:disabled { opacity: .5; cursor: default; }
+  .banner {
+    background: var(--sig-over-bg);
+    border: 1px solid var(--sig-over);
+    color: var(--sig-over);
+    border-radius: 4px;
+    padding: 11px 14px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .banner code {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    padding: 0 4px;
+  }
+  .skeleton { padding: 26px 17px 30px; color: var(--muted); font-size: 14px; }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <h1>Kit Cadence Roster</h1>
+      <p>Every tracked relationship measured against its own contact cadence — who has run past their window, and who has never been logged at all.</p>
+    </div>
+    <div class="stamp">
+      <span class="stampline" id="stampline">Reading <b>the gateway…</b></span>
+      <span class="stampline"><b id="total">—</b> contacts &middot; kit schema</span>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <div class="strip" id="strip"></div>
+
+  <section class="pressure">
+    <h2>Where the pressure sits</h2>
+    <div id="tiers"></div>
+  </section>
+
+  <div class="controls">
+    <input class="search" id="q" type="search" placeholder="Find a contact…" aria-label="Find a contact by name">
+    <div class="chips" id="tierchips" role="group" aria-label="Filter by tier"></div>
+    <label class="toggle"><input type="checkbox" id="showDorm"> Include inactive</label>
+    <label class="toggle" for="sort">Sort</label>
+    <select class="sel" id="sort" aria-label="Sort roster">
+      <option value="urgency">Most overdue first</option>
+      <option value="name">Name</option>
+      <option value="recent">Last contact</option>
+      <option value="tier">Tier</option>
+    </select>
+    <span class="spacer"></span>
+    <button type="button" class="chip" id="refresh">Refresh</button>
+    <button type="button" class="chip" id="theme" title="Switch theme">Dark</button>
+  </div>
+
+  <section class="roster">
+    <header>
+      <h2>Roster</h2>
+      <span class="count" id="count"></span>
+    </header>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Contact</th>
+            <th scope="col">Tier</th>
+            <th scope="col">Status</th>
+            <th scope="col">Cadence window &rarr; overdue</th>
+            <th scope="col" class="num">Elapsed</th>
+            <th scope="col" class="num">Last contact</th>
+            <th scope="col" class="num">Capture</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="skeleton" id="skeleton">Loading contacts from the gateway…</p>
+    <p class="empty-msg" id="none" hidden>No contacts match those filters.</p>
+  </section>
+
+  <footer class="notes">
+    <p><strong>Reading the meter.</strong> The bar is one scale per row: the pale track is that contact's own cadence window (weekly through annual), the hairline is the day it expires, and the tinted band past it is overdue time. A hatched track means no interaction has ever been logged.</p>
+    <p><strong>Capture.</strong> <code>WA</code> <code>LI</code> <code>IG</code> — filled where message capture is enabled, outlined where a handle exists but capture is off, faint where there is no handle. Capture is disabled by default and nothing is stored without confirmation.</p>
+    <p>Live view of the <code>kit</code> schema, read from <code>/api/contacts</code> on this same gateway. It refreshes when the page loads and whenever you press Refresh — nothing here is cached from a previous day.</p>
+  </footer>
+</div>
+<script>
+  (function () {
+    var DAY = 86400000;
+    var DATA = [];
+    var lastGood = null;
+
+    var STATES = {
+      overdue: { key: "overdue", label: "Overdue", c: "--sig-over", b: "--sig-over-bg", sub: "past the window" },
+      soon:    { key: "soon",    label: "Due soon", c: "--sig-soon", b: "--sig-soon-bg", sub: "last fifth of cadence" },
+      ontrack: { key: "ontrack", label: "On track", c: "--sig-ok", b: "--sig-ok-bg", sub: "inside the window" },
+      never:   { key: "never",   label: "Never logged", c: "--sig-none", b: "--sig-none-bg", sub: "no interaction yet" },
+      dormant: { key: "dormant", label: "Inactive", c: "--sig-dorm", b: "--sig-dorm-bg", sub: "not in rotation" }
+    };
+    var ORDER = ["overdue", "soon", "never", "ontrack", "dormant"];
+    var TIERNAME = { 1: "Inner circle", 2: "Close", 3: "Business" };
+
+    /* Capture state per channel: filled when capture is on, outlined when a
+       handle exists but capture is off, faint when there is no handle. */
+    function cap(handle, state) {
+      if (!handle) return "none";
+      return state === "enabled" ? "on" : "off";
+    }
+
+    /* The gateway's contact shape, narrowed to what the roster draws. */
+    function fromApi(c) {
+      return {
+        n: c.name,
+        t: c.tier,
+        f: c.frequency,
+        d: c.frequency_days,
+        l: c.last_contact || null,
+        a: c.active !== false,
+        wa: cap(c.whatsapp, c.whatsapp_capture),
+        li: cap(c.linkedin_username, c.linkedin_capture),
+        ig: cap(c.instagram_username, c.instagram_capture)
+      };
+    }
+
+    /* Drift is recomputed on every load, against today — not against the day
+       the data was fetched. A page left open overnight re-classifies on the
+       next refresh rather than quietly ageing. */
+    function classify(list) {
+      var today = new Date();
+      today.setHours(0, 0, 0, 0);
+      list.forEach(function (c) {
+        if (!c.a) {
+          c.st = "dormant";
+          c.days = c.l ? Math.round((today - new Date(c.l)) / DAY) : null;
+          c.ratio = -2;
+          return;
+        }
+        if (!c.l) { c.st = "never"; c.days = null; c.ratio = 9; return; }
+        c.days = Math.round((today - new Date(c.l)) / DAY);
+        c.ratio = c.days / c.d;
+        c.st = c.ratio > 1 ? "overdue" : (c.ratio >= 0.8 ? "soon" : "ontrack");
+      });
+      return list;
+    }
+
+    var filters = { state: null, tier: null, q: "", dorm: false, sort: "urgency" };
+    try {
+      var saved = JSON.parse(localStorage.getItem("kit-roster-view") || "null");
+      if (saved && typeof saved === "object") {
+        filters.state = saved.state || null;
+        filters.tier = saved.tier || null;
+        filters.dorm = !!saved.dorm;
+        filters.sort = saved.sort || "urgency";
+      }
+    } catch (e) { /* storage unavailable — defaults are fine */ }
+
+    function persist() {
+      try {
+        localStorage.setItem("kit-roster-view", JSON.stringify({
+          state: filters.state, tier: filters.tier, dorm: filters.dorm, sort: filters.sort
+        }));
+      } catch (e) { /* ignore */ }
+    }
+
+    var strip = document.getElementById("strip");
+    var tiers = document.getElementById("tiers");
+    var chips = document.getElementById("tierchips");
+    var rows = document.getElementById("rows");
+    var countEl = document.getElementById("count");
+    var noneEl = document.getElementById("none");
+    var skeleton = document.getElementById("skeleton");
+    var banner = document.getElementById("banner");
+    var stampline = document.getElementById("stampline");
+    var totalEl = document.getElementById("total");
+    var refreshBtn = document.getElementById("refresh");
+    var themeBtn = document.getElementById("theme");
+
+    /* ---- theme ----
+       The button names the theme you are in, not the one you would switch to;
+       the title says what clicking does. Boot-time default is set in <head>. */
+    function paintThemeBtn() {
+      var t = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+      themeBtn.textContent = t === "light" ? "Light" : "Dark";
+      themeBtn.title = "Switch to " + (t === "light" ? "dark" : "light");
+    }
+    themeBtn.addEventListener("click", function () {
+      var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem("kit-roster-theme", next); } catch (e) { /* ignore */ }
+      paintThemeBtn();
+    });
+    paintThemeBtn();
+
+    /* ---- summary strip doubles as the state filter ---- */
+    function buildStrip() {
+      strip.innerHTML = "";
+      ORDER.forEach(function (k) {
+        var s = STATES[k];
+        var n = DATA.filter(function (c) { return c.st === k; }).length;
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "stat";
+        b.dataset.state = k;
+        b.style.setProperty("--dot", "var(" + s.c + ")");
+        b.style.setProperty("--tint", "var(" + s.b + ")");
+        b.setAttribute("aria-pressed", "false");
+        b.innerHTML = '<span class="n"></span><span class="k"></span><span class="sub"></span>';
+        b.querySelector(".n").textContent = n;
+        b.querySelector(".k").textContent = s.label;
+        b.querySelector(".sub").textContent = s.sub;
+        b.addEventListener("click", function () {
+          filters.state = filters.state === k ? null : k;
+          if (filters.state === "dormant") {
+            filters.dorm = true;
+            document.getElementById("showDorm").checked = true;
+          }
+          persist();
+          render();
+        });
+        strip.appendChild(b);
+      });
+    }
+
+    /* ---- tier pressure bars ---- */
+    function buildTiers() {
+      tiers.innerHTML = "";
+      [1, 2, 3].forEach(function (t) {
+        var set = DATA.filter(function (c) { return c.t === t; });
+        var row = document.createElement("div");
+        row.className = "tierline";
+        var bar = set.length ? ORDER.map(function (k) {
+          var n = set.filter(function (c) { return c.st === k; }).length;
+          if (!n) return "";
+          return '<span title="' + n + " " + STATES[k].label + '" style="width:' +
+            (n / set.length * 100).toFixed(2) + "%;background:var(" + STATES[k].c + ')"></span>';
+        }).join("") : "";
+        row.innerHTML = '<span class="lbl">Tier ' + t + ' <em>' + TIERNAME[t] + '</em></span>' +
+          '<span class="tierbar">' + bar + "</span>" +
+          '<span class="tot">' + set.length + "</span>";
+        tiers.appendChild(row);
+      });
+    }
+
+    /* ---- tier chips (bound once; they filter, they don't fetch) ---- */
+    [1, 2, 3].forEach(function (t) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.textContent = "Tier " + t;
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", function () {
+        filters.tier = filters.tier === t ? null : t;
+        persist();
+        render();
+      });
+      chips.appendChild(b);
+    });
+
+    var q = document.getElementById("q");
+    q.addEventListener("input", function () { filters.q = q.value.trim().toLowerCase(); render(); });
+
+    var dormBox = document.getElementById("showDorm");
+    dormBox.checked = filters.dorm;
+    dormBox.addEventListener("change", function () {
+      filters.dorm = dormBox.checked;
+      if (!filters.dorm && filters.state === "dormant") filters.state = null;
+      persist();
+      render();
+    });
+
+    var sortSel = document.getElementById("sort");
+    sortSel.value = filters.sort;
+    sortSel.addEventListener("change", function () { filters.sort = sortSel.value; persist(); render(); });
+
+    function fmtDate(iso) {
+      if (!iso) return "—";
+      var d = new Date(iso);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" });
+    }
+
+    function fmtClock(d) {
+      return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function chanDot(code, state) {
+      var cls = state === "on" ? "on" : (state === "off" ? "off" : "none");
+      var t = state === "on" ? "capture enabled" : (state === "off" ? "handle on file, capture off" : "no handle");
+      return '<span class="cdot ' + cls + '" title="' + code + ": " + t + '">' + code + "</span>";
+    }
+
+    function render() {
+      document.querySelectorAll(".stat").forEach(function (b) {
+        b.setAttribute("aria-pressed", String(b.dataset.state === filters.state));
+      });
+      Array.prototype.forEach.call(chips.children, function (b, i) {
+        b.setAttribute("aria-pressed", String(filters.tier === i + 1));
+      });
+
+      var list = DATA.filter(function (c) {
+        if (!filters.dorm && c.st === "dormant") return false;
+        if (filters.state && c.st !== filters.state) return false;
+        if (filters.tier && c.t !== filters.tier) return false;
+        if (filters.q && c.n.toLowerCase().indexOf(filters.q) === -1) return false;
+        return true;
+      });
+
+      list.sort(function (a, b) {
+        if (filters.sort === "name") return a.n.localeCompare(b.n);
+        if (filters.sort === "tier") return a.t - b.t || a.n.localeCompare(b.n);
+        if (filters.sort === "recent") {
+          if (!a.l) return 1;
+          if (!b.l) return -1;
+          return a.l < b.l ? -1 : (a.l > b.l ? 1 : 0);
+        }
+        return b.ratio - a.ratio || a.n.localeCompare(b.n);
+      });
+
+      rows.innerHTML = "";
+      list.forEach(function (c) {
+        var s = STATES[c.st];
+        var tr = document.createElement("tr");
+        if (c.st === "dormant") tr.className = "dorm";
+
+        var meter;
+        if (c.l === null) {
+          meter = '<div class="track empty" title="no interaction logged"></div>';
+        } else {
+          var pct = Math.min(c.ratio, 1.389) * 72;
+          meter = '<div class="track"><span class="zone"></span>' +
+            '<span class="fill" style="width:' + pct.toFixed(2) + "%;--fc:var(" + s.c + ')"></span>' +
+            '<span class="bound"></span></div>';
+        }
+
+        var elapsed;
+        if (c.days === null) elapsed = "—";
+        else if (c.ratio > 1) elapsed = "+" + (c.days - c.d) + "d over";
+        else elapsed = c.days + "d / " + c.d;
+
+        tr.innerHTML =
+          '<td><span class="who"><span class="nm"></span><span class="cad"></span></span></td>' +
+          '<td class="tier"><span class="tierpip">T' + c.t + "</span></td>" +
+          '<td class="state"><span class="pill" style="--pc:var(' + s.c + ");--pb:var(" + s.b + ')"></span></td>' +
+          '<td class="meter">' + meter + "</td>" +
+          '<td class="days" style="--dc:var(' + (c.ratio > 1 ? s.c : "--ink-2") + ')"></td>' +
+          '<td class="seen"></td>' +
+          '<td class="chan"><span class="dots">' + chanDot("WA", c.wa) + chanDot("LI", c.li) + chanDot("IG", c.ig) + "</span></td>";
+
+        tr.querySelector(".nm").textContent = c.n;
+        tr.querySelector(".cad").textContent = c.f + " · every " + c.d + " days";
+        tr.querySelector(".pill").textContent = s.label;
+        tr.querySelector(".days").textContent = elapsed;
+        tr.querySelector(".seen").textContent = fmtDate(c.l);
+        rows.appendChild(tr);
+      });
+
+      countEl.textContent = list.length + " of " + DATA.length + " shown";
+      noneEl.hidden = list.length > 0;
+    }
+
+    /* ---- the fetch ----
+       Same origin as the gateway that serves this file, so /api/contacts needs
+       no host and no CORS. A failed refresh keeps whatever is already on
+       screen and says how old it is, rather than blanking the roster.
+
+       The cache-buster is load-bearing, not habit. The Kit PWA registers a
+       service worker at scope "/" whose NetworkFirst rule covers /api/.*, so
+       once that worker is installed it also controls this page — and on a slow
+       or dead gateway it would quietly hand back a cached roster from days ago.
+       That is the exact failure this page exists to stop. A unique URL per load
+       has no cache entry to match, so the worker must go to the network and a
+       real failure surfaces as a failure. */
+    function load() {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = "Refreshing…";
+
+      return fetch("/api/contacts?t=" + Date.now(), { cache: "no-store" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("gateway returned HTTP " + r.status);
+          return r.json();
+        })
+        .then(function (body) {
+          var arr = body.contacts || body;
+          if (!Array.isArray(arr)) throw new Error("unexpected response shape");
+
+          DATA = classify(arr.map(fromApi));
+          lastGood = new Date();
+
+          skeleton.hidden = true;
+          banner.hidden = true;
+          totalEl.textContent = DATA.length;
+          stampline.className = "stampline";
+          stampline.innerHTML = "";
+          stampline.appendChild(document.createTextNode("Updated "));
+          var bold = document.createElement("b");
+          bold.textContent = fmtClock(lastGood);
+          stampline.appendChild(bold);
+
+          buildStrip();
+          buildTiers();
+          render();
+        })
+        .catch(function (err) {
+          banner.hidden = false;
+          banner.innerHTML = "";
+          var strong = document.createElement("strong");
+          strong.textContent = "Could not reach the gateway. ";
+          banner.appendChild(strong);
+          banner.appendChild(document.createTextNode(err.message + ". Check it is running with "));
+          var code = document.createElement("code");
+          code.textContent = "pm2 status kit-gateway";
+          banner.appendChild(code);
+          banner.appendChild(document.createTextNode(
+            lastGood ? " — the roster below is from " + fmtClock(lastGood) + "." : "."
+          ));
+
+          stampline.className = "stampline bad";
+          stampline.innerHTML = "";
+          if (lastGood) {
+            stampline.appendChild(document.createTextNode("Stale "));
+            var stale = document.createElement("b");
+            stale.textContent = fmtClock(lastGood);
+            stampline.appendChild(stale);
+          } else {
+            var nodata = document.createElement("b");
+            nodata.textContent = "No data";
+            stampline.appendChild(nodata);
+            skeleton.hidden = true;
+          }
+        })
+        .then(function () {
+          refreshBtn.disabled = false;
+          refreshBtn.textContent = "Refresh";
+        });
+    }
+
+    refreshBtn.addEventListener("click", load);
+    load();
+  })();
+</script>
+</body>
+</html>
