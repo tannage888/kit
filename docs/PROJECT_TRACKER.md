@@ -19,14 +19,22 @@ status: done
 
 daemon_pin:
   repo: C:\dev\claude_whatsapp_integration
-  commit: b503624ce7cf5af75974c584047a369ee04d9ac0
-  message: "feat: add GET /api/groups endpoint"
-  verified: 2026-05-16
+  commit: 58c89e0
+  message: "Merge pull request #4 — session health, history fetch contract, quiet-gap classification"
+  verified: 2026-09-22
   endpoints_consumed:
     - GET /api/status
     - GET /api/groups
     - GET /api/chats/:jid/messages
     - POST /api/chats/:jid/ack
+  notes: |
+    The daemon now pushes live to Kit: WA_INCOMING_HOOK_URL is set in the
+    daemon's .env and POSTs each inbound message to
+    POST /api/incoming-message here. Until 2026-09-22 it was unset, so
+    MessageRouter ran only from the sweep.
+
+    The daemon runs from its working tree, which sits ahead of its own main
+    while PR #5 is open. None of the endpoints above changed in that PR.
 
 stages:
   supabase-source-of-truth:
