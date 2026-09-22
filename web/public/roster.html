@@ -609,7 +609,7 @@
   <footer class="notes">
     <p><strong>Reading the meter.</strong> The bar is one scale per row: the pale track is that contact's own cadence window (weekly through annual), the hairline is the day it expires, and the tinted band past it is overdue time. A hatched track means no interaction has ever been logged.</p>
     <p><strong>Capture.</strong> <code>WA</code> <code>LI</code> <code>IG</code> — filled where message capture is enabled, outlined where a handle exists but capture is off, faint where there is no handle. Capture is disabled by default and nothing is stored without confirmation.</p>
-    <p>Live view of the <code>kit</code> schema, read from <code>/api/contacts</code> on this same gateway. It refreshes when the page loads and whenever you press Refresh — nothing here is cached from a previous day.</p>
+    <p>Live view of the <code>kit</code> schema, read from <code>/api/contacts</code> on this same gateway. It refreshes on load, every minute while you have it open, when you return to the tab, and whenever you press Refresh — nothing here is cached from a previous day.</p>
   </footer>
 </div>
 <script>
@@ -897,9 +897,18 @@
        That is the exact failure this page exists to stop. A unique URL per load
        has no cache entry to match, so the worker must go to the network and a
        real failure surfaces as a failure. */
-    function load() {
-      refreshBtn.disabled = true;
-      refreshBtn.textContent = "Refreshing…";
+    var inFlight = false;
+
+    function load(opts) {
+      /* A poll is silent: it must not flicker the button or fight a click.
+         Only a press announces itself. */
+      var silent = !!(opts && opts.silent);
+      if (inFlight) return Promise.resolve();
+      inFlight = true;
+      if (!silent) {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "Refreshing…";
+      }
 
       return fetch("/api/contacts?t=" + Date.now(), { cache: "no-store" })
         .then(function (r) {
@@ -956,12 +965,33 @@
           }
         })
         .then(function () {
-          refreshBtn.disabled = false;
-          refreshBtn.textContent = "Refresh";
+          inFlight = false;
+          if (!silent) {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = "Refresh";
+          }
         });
     }
 
-    refreshBtn.addEventListener("click", load);
+    /* ---- keeping itself current ----
+       The gateway sweeps every 3 hours, so a minute's poll is far finer than
+       the data can actually change — it is cheap (a local in-memory registry
+       read) and it means a page left open is never quietly wrong.
+
+       Polling pauses while the tab is hidden, because nobody is reading it,
+       and a hidden tab that keeps firing is just noise in the gateway log. The
+       visibility handler covers coming back to it: that is the moment the
+       stale-looking numbers would otherwise be believed. */
+    var POLL_MS = 60000;
+    setInterval(function () {
+      if (!document.hidden) load({ silent: true });
+    }, POLL_MS);
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) load({ silent: true });
+    });
+
+    refreshBtn.addEventListener("click", function () { load(); });
     load();
   })();
 </script>
